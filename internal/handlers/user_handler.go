@@ -50,3 +50,25 @@ func DeleteUser(c *gin.Context) {
 	// TODO: Delete user by ID via service layer.
 	c.JSON(http.StatusOK, gin.H{"message": "DeleteUser endpoint - TODO: implement logic"})
 }
+
+// LoginUser handles POST /v1/users/login
+func LoginUser(c *gin.Context) {
+	var req models.LoginRequest
+	// Bind JSON from the request to the LoginRequest struct.
+	if err := c.ShouldBindJSON(&req); err != nil {
+		zap.L().Error("failed to bind JSON", zap.Error(err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
+		return
+	}
+
+	// Call the service layer to authenticate the user and generate a token.
+	token, err := services.LoginUser(&req)
+	if err != nil {
+		zap.L().Error("failed to login user", zap.Error(err))
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		return
+	}
+
+	// Return the generated token in the response.
+	c.JSON(http.StatusOK, gin.H{"token": token})
+}

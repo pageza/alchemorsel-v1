@@ -15,6 +15,7 @@ func SetupRouter() *gin.Engine {
 	{
 		// User endpoints
 		v1.POST("/users", handlers.CreateUser)
+		v1.POST("/users/login", handlers.LoginUser)
 		v1.GET("/users/:id", handlers.GetUser)
 		v1.PUT("/users/:id", handlers.UpdateUser)
 		v1.DELETE("/users/:id", handlers.DeleteUser)

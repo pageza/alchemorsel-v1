@@ -3,10 +3,13 @@ package services
 import (
 	"errors"
 	"fmt"
+	"os"
+	"time"
 
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 
+	"github.com/golang-jwt/jwt/v4"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -45,4 +48,36 @@ func UpdateUser(id string, user *models.User) error {
 func DeleteUser(id string) error {
 	// TODO: Implement logic to delete a user.
 	return errors.New("not implemented")
+}
+
+// LoginUser authenticates a user and returns a JWT token.
+func LoginUser(req *models.LoginRequest) (string, error) {
+	// Retrieve user by email.
+	user, err := repositories.GetUserByEmail(req.Email)
+	if err != nil {
+		return "", errors.New("invalid credentials")
+	}
+
+	// Compare the provided password with the stored hashed password.
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		return "", errors.New("invalid credentials")
+	}
+
+	// Generate JWT token.
+	secretKey := os.Getenv("JWT_SECRET")
+	if secretKey == "" {
+		return "", errors.New("JWT secret is not set")
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": user.ID,
+		"email":   user.Email,
+		"exp":     time.Now().Add(time.Hour * 1).Unix(),
+	})
+
+	tokenString, err := token.SignedString([]byte(secretKey))
+	if err != nil {
+		return "", err
+	}
+	return tokenString, nil
 }

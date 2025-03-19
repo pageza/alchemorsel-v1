@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/pageza/alchemorsel-v1/internal/config"
+	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/migrations"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
 )
@@ -12,6 +13,11 @@ func main() {
 	// Load configuration from .env file
 	if err := config.LoadConfig(); err != nil {
 		log.Fatalf("Error loading config: %v", err)
+	}
+
+	// Initialize the database connection
+	if err := db.Init(); err != nil {
+		log.Fatalf("Error initializing database: %v", err)
 	}
 
 	// Run database migrations before starting the server
