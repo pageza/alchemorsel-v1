@@ -68,7 +68,9 @@ jobs:
         run: newman run tests/collections/user_endpoints.postman_collection.json --delay-request 500
 
       - name: Print Docker logs
+        if: always()
         run: docker logs recipeservice
 
       - name: Stop Docker container
+        if: always()
         run: docker stop recipeservice 
