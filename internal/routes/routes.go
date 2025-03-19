@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"recipeservice/internal/handlers"
+	"github.com/pageza/alchemorsel-v1/internal/handlers"
 
 	"github.com/gin-gonic/gin"
 )

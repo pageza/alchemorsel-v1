@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"recipeservice/internal/routes"
+	"github.com/pageza/alchemorsel-v1/internal/routes"
 )
 
 func TestHealthCheck(t *testing.T) {

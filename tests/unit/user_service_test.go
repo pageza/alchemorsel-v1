@@ -3,8 +3,8 @@ package unit
 import (
 	"testing"
 
-	"recipeservice/internal/models"
-	"recipeservice/internal/services"
+	"github.com/pageza/alchemorsel-v1/internal/models"
+	"github.com/pageza/alchemorsel-v1/internal/services"
 )
 
 func TestCreateUser(t *testing.T) {

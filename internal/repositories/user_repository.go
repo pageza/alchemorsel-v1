@@ -1,6 +1,6 @@
 package repositories
 
-import "recipeservice/internal/models"
+import "github.com/pageza/alchemorsel-v1/internal/models"
 
 // CreateUser inserts a new user into the database.
 func CreateUser(user *models.User) error {

@@ -3,8 +3,9 @@ package services
 import (
 	"errors"
 	"fmt"
-	"recipeservice/internal/models"
-	"recipeservice/internal/repositories"
+
+	"github.com/pageza/alchemorsel-v1/internal/models"
+	"github.com/pageza/alchemorsel-v1/internal/repositories"
 
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"

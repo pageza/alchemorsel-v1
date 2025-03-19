@@ -2,7 +2,8 @@ package services
 
 import (
 	"errors"
-	"recipeservice/internal/models"
+
+	"github.com/pageza/alchemorsel-v1/internal/models"
 )
 
 // ListRecipes retrieves a list of recipes.

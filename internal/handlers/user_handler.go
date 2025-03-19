@@ -2,8 +2,9 @@ package handlers
 
 import (
 	"net/http"
-	"recipeservice/internal/models"
-	"recipeservice/internal/services"
+
+	"github.com/pageza/alchemorsel-v1/internal/models"
+	"github.com/pageza/alchemorsel-v1/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"

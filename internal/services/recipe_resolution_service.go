@@ -2,7 +2,8 @@ package services
 
 import (
 	"errors"
-	"recipeservice/internal/models"
+
+	"github.com/pageza/alchemorsel-v1/internal/models"
 )
 
 // ResolveRecipe searches for a matching recipe; if not found, generates one using external APIs.

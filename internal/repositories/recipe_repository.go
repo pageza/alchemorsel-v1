@@ -1,6 +1,6 @@
 package repositories
 
-import "recipeservice/internal/models"
+import "github.com/pageza/alchemorsel-v1/internal/models"
 
 // ListRecipes retrieves a list of recipes from the database.
 func ListRecipes() ([]*models.Recipe, error) {
