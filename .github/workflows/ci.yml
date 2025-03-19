@@ -48,7 +48,18 @@ jobs:
         run: docker run -d -p 8080:8080 --name recipeservice recipeservice
 
       - name: Wait for service to be ready
-        run: sleep 10
+        run: |
+          echo "Waiting for recipeservice to be ready on port 8080..."
+          for i in {1..10}; do
+            if nc -z localhost 8080; then
+              echo "recipeservice is up!"
+              exit 0
+            fi
+            echo "Waiting... ($i/10)"
+            sleep 5
+          done
+          echo "recipeservice did not become ready in time."
+          exit 1
 
       - name: Install Newman
         run: npm install -g newman
