@@ -1,0 +1,81 @@
+{
+  "info": {
+    "name": "User Endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "c80d9e6c-1234-4321-aaaa-0123456789ab"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create User - Success",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"test-user-1\",\n  \"name\": \"Test User\",\n  \"email\": \"testuser@example.com\",\n  \"password\": \"password\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "users"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Login User - Success",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"password\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/users/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "users", "login"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Login User - Invalid Credentials",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"wrongpassword\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/users/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "users", "login"]
+        }
+      },
+      "response": []
+    }
+  ]
+} 
