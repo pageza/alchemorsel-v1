@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.20
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: "${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}"
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run Unit Tests
+        run: go test -v ./tests/unit/...
+
+      - name: Run Integration Tests
+        run: go test -v ./tests/integration/...
+
+      - name: Build Docker image
+        run: docker build -t recipeservice .
+
+      - name: Run E2E tests with Newman
+        run: 'echo "E2E tests with Newman - TODO: implement command"' 

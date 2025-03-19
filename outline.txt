@@ -1,0 +1,353 @@
+1. Project Overview
+We are building a monolithic HTTP REST API using Go and the Gin framework. This service will manage recipes and users while also serving as a recipe resolver (or generator) when queries do not return a close/exact match. All endpoints will use strict REST resource naming conventions, but we’ll also add versioned endpoints (e.g., /v1/recipes/resolve) for the recipe resolution functionality.
+Both user management and recipe management are core features, with full CRUD support. In addition, the resolver endpoint will support custom query attributes (e.g., “no onions”, “vegan”, “Italian”, or specific appliance requirements such as a frying pan or air fryer).
+---
+2. Architecture & Layering
+2.1. Routing and Controller Layer
+Gin Framework:
+REST endpoints will be defined for recipes, users, and recipe resolution.
+Endpoints like /recipes, /users for standard CRUD operations and /recipes/resolve for query-driven recipe generation.
+Versioning will be introduced (e.g., /v1/recipes/resolve) to allow future enhancements without breaking clients.
+Middleware:
+JWT Authentication: Securing endpoints with JWT.
+Rate Limiting & Session Management: Using Redis for session tokens and rate limiting.
+Logging & Error Handling: Global middleware for logging, error responses in JSON, and detailed messages.
+2.2. Service Layer
+Business Logic:
+Implements recipe search, resolution, creation, updates, and deletion.
+In the recipe resolution flow, the service first searches for a recipe in Postgres (using pgvector for similarity based on embeddings) and then calls external APIs if no suitable match is found.
+Supports custom query attributes; for instance, filtering out recipes with certain ingredients or ensuring that recipes meet dietary or appliance-use criteria.
+Composite Operations:
+For recipe resolution:
+1. Query Search: Search for recipes that meet the criteria.
+Decision Making: Verify if a close match exists.
+If found, return the matches.
+If not, call the external LLM API (Deepseek) to generate a recipe.
+3. Embedding Generation: Use the external OpenAI API to generate an embedding for the generated recipe.
+Storage: Persist the generated recipe (along with its embedding) in Postgres.
+Retry & Circuit Breaker:
+A retry mechanism will be implemented (3 attempts) for each external API call before triggering a circuit breaker to prevent cascading failures.
+2.3. Data Access Layer (Repository Pattern)
+Postgres with pgvector:
+The recipes and users will be stored in Postgres.
+The recipe model contains fields such as ID, Title, Ingredients, Steps, NutritionalInfo, AllergyDisclaimer, Appliances, timestamps, and an Embedding vector.
+Although the model currently holds NutritionalInfo, Appliances, and AllergyDisclaimer as part of the recipe record, future iterations might refactor these into their own tables.
+This refactoring would allow for complex relationships and filtering logic. However, for the first iteration, these will remain embedded in the recipe record.
+Redis:
+Initially used for rate limiting, session token management, and later to plug in more advanced caching (hooks will be placed to enable caching of recent query results or even LLM responses/embeddings).
+2.4. External Integrations (Integration Layer)
+LLM API (Deepseek):
+Used for generating a recipe when no satisfactory match exists.
+Integrated with retry logic and circuit breaker patterns (3 retries per call).
+Embedding API (OpenAI):
+After recipe generation, this API is called to generate numeric embeddings for recipes.
+The response is stored along with the recipe for similarity search and future recommendations.
+API Abstraction:
+Both providers are encapsulated in abstraction layers to allow for easy swapping or integration with additional providers (and eventually, locally hosted models).
+---
+3. Endpoint Specification
+3.1. User Endpoints (Strict RESTful)
+POST /v1/users:
+Create a new user.
+GET /v1/users/:id:
+Get a user profile.
+PUT /v1/users/:id:
+Update user details.
+DELETE /v1/users/:id:
+Delete a user.
+3.2. Recipe Endpoints (Strict RESTful)
+GET /v1/recipes:
+List/search recipes.
+Supports query parameters for filtering (e.g., dietary restrictions like “vegan”, exclusions like “no onions”, or specific attributes like “Italian” cuisine, and even appliance-specific criteria).
+GET /v1/recipes/:id:
+Retrieve a specific recipe.
+POST /v1/recipes:
+Create a new user-submitted recipe.
+PUT /v1/recipes/:id:
+Update an existing recipe.
+DELETE /v1/recipes/:id:
+Delete a recipe.
+3.3. Recipe Resolution Endpoint
+POST /v1/recipes/resolve:
+Accepts JSON payload:
+{
+"
+q
+u
+e
+r
+y
+"
+:
+"
+v
+e
+g
+e
+t
+a
+r
+i
+a
+n
+I
+t
+a
+l
+i
+a
+n
+w
+i
+t
+h
+n
+o
+o
+n
+i
+o
+n
+s
+"
+,
+"
+a
+t
+t
+r
+i
+b
+u
+t
+e
+s
+"
+:
+{
+"
+d
+i
+e
+t
+"
+:
+"
+v
+e
+g
+e
+t
+a
+r
+i
+a
+n
+"
+,
+"
+c
+u
+i
+s
+i
+n
+e
+"
+:
+"
+I
+t
+a
+l
+i
+a
+n
+"
+,
+"
+e
+x
+c
+l
+u
+d
+e
+s
+"
+:
+[
+"
+o
+n
+i
+o
+n
+s
+"
+]
+,
+"
+a
+p
+p
+l
+i
+a
+n
+c
+e
+s
+"
+:
+[
+"
+a
+i
+r
+f
+r
+y
+e
+r
+"
+]
+}
+}
+{"query":"vegetarianItalianwithnoonions","attributes":{"diet":"vegetarian","cuisine":"Italian","excludes":["onions"],"appliances":["airfryer"]}}
+Processing:
+First, search using the provided attributes within the database.
+If no close match is found, the service calls Deepseek for recipe generation.
+Once a recipe is generated, OpenAI is used to obtain an embedding.
+The generated recipe is inserted into the database, and a JSON response is returned with the primary recipe and any alternative recipes.
+Response Example:
+{
+"
+p
+r
+i
+m
+a
+r
+y
+r
+e
+c
+i
+p
+e
+"
+:
+.
+.
+r
+e
+c
+i
+p
+e
+f
+i
+e
+l
+d
+s
+.
+.
+,
+"
+a
+l
+t
+e
+r
+n
+a
+t
+i
+v
+e
+r
+e
+c
+i
+p
+e
+s
+"
+:
+[
+{
+.
+.
+r
+e
+c
+i
+p
+e
+f
+i
+e
+l
+d
+s
+.
+.
+}
+,
+…
+]
+}
+{"primary 
+r
+​
+ ecipe":..recipefields..,"alternative 
+r
+​
+ ecipes":[{..recipefields..},…]}
+---
+4. Cross-Cutting Concerns
+4.1. Error Handling & Resiliency
+Retry and Circuit Breaker:
+External API calls (LLM and Embedding) will be retried three times before a circuit breaker pattern is engaged.
+Detailed JSON errors with proper HTTP status codes will be returned to clients if all retries fail.
+Logging:
+Structured logging for every request and integration call.
+Error logs must provide enough context to diagnose external API failures.
+4.2. Security
+JWT Authentication:
+All endpoints (except public ones such as user registration or basic recipe viewing) require a valid JWT.
+API Keys & OAuth:
+External API calls will be authenticated using API keys.
+Although API keys are used for external integrations, an OAuth strategy might come into play later for user authentication.
+4.3. Modularity & Maintainability
+Repository, Service, and Integration Layers:
+The codebase will be organized into clear, modular packages adhering to Go best practices.
+This pattern ensures that business logic is separated from database access and external integration calls.
+All modules will be unit tested, and integration tests will be set up to test critical flows (such as recipe resolution).
+Potential Future Refactoring (Data Model):
+While the recipe model remains as a single table in the first iteration, NutritionalInfo, Appliances, and AllergyDisclaimer might be refactored into separate tables if the complexity of filtering or relationships warrants it.
+---
+5. Data Flow (Example: Recipe Resolution)
+1. Client Request:
+The client sends a POST request to /v1/recipes/resolve with query parameters and desired attributes.
+Authentication & Middleware:
+The request passes through the JWT middleware and rate-limiting middleware (with Redis).
+Service Processing:
+The service performs a search in the Postgres database using pgvector for similarity search based on the recipe embeddings.
+Custom attributes such as dietary restrictions (no onions, vegan), cuisine type (Italian), and appliance preferences are applied as filters.
+If a close match is found, the primary recipe and alternatives are returned.
+If no adequate match is found, the service:
+Calls the Deepseek API to generate a new recipe.
+Uses the OpenAI API to generate an embedding for the recipe.
+Persists the generated recipe in Postgres.
+Response:
+The service returns a JSON response containing the primary recipe and any alternative recipes, along with proper metadata.
+---
+Final Thoughts
+This design offers a clean, modular, and scalable architecture. We have planned for:
+A unified REST API with clear versioning.
+Full CRUD operations for recipes and users.
+A specialized resolution endpoint that leverages external LLM and embedding APIs with robust error handling and retry logic.
+Flexibility for future enhancements—including decomposing the recipe model into additional tables and plugging in advanced caching via Redis.

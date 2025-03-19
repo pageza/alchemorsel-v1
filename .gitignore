@@ -1,0 +1,27 @@
+# Binaries
+/main
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build output directories
+/build/
+
+# Dependency directories
+/vendor/
+node_modules/
+
+# IDE/editor settings
+.vscode/
+.idea/
+
+# Environment variables and secrets
+.env*
+!.env.example
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store 
