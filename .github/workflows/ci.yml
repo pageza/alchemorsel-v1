@@ -45,7 +45,7 @@ jobs:
         run: docker build -t recipeservice .
 
       - name: Run Docker container for E2E tests
-        run: docker run -d -p 8080:8080 --name recipeservice recipeservice
+        run: docker run -d --env-file .env -p 8080:8080 --name recipeservice recipeservice
 
       - name: Wait for service to be ready
         run: |

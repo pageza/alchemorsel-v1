@@ -19,6 +19,7 @@ node_modules/
 # Environment variables and secrets
 .env*
 !.env.example
+!.env.ci
 
 # Logs
 *.log
