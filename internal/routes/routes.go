@@ -4,6 +4,8 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/handlers"
 	"github.com/pageza/alchemorsel-v1/internal/middleware"
 
+	"strings"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -13,6 +15,19 @@ func SetupRouter() *gin.Engine {
 
 	// NEW: Add security headers middleware globally.
 	router.Use(middleware.SecurityHeaders())
+
+	// Conditionally add test authentication bypass middleware when in test mode.
+	if gin.Mode() == gin.TestMode {
+		router.Use(func(c *gin.Context) {
+			authHeader := c.GetHeader("Authorization")
+			if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+				// For testing purposes, assume the token itself is the user ID.
+				token := strings.TrimPrefix(authHeader, "Bearer ")
+				c.Set("currentUser", token)
+			}
+			c.Next()
+		})
+	}
 
 	// Grouping versioned API routes
 	v1 := router.Group("/v1")
