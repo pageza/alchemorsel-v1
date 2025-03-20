@@ -31,18 +31,19 @@ func TestMain(m *testing.M) {
 }
 
 func TestCreateUser(t *testing.T) {
+	ctx := context.Background()
 	user := &models.User{
-		ID:       "1",
-		Name:     "Test User",
-		Email:    "test@example.com",
-		Password: "password", // Plain text password to be hashed.
+		Name:  "Test User",
+		Email: "test@example.com",
+		// Updated password: at least 8 characters with one digit, one uppercase, one lowercase, and one special character.
+		Password: "Test1234!",
 	}
-	err := services.CreateUser(context.Background(), user)
+	err := services.CreateUser(ctx, user)
 	if err != nil {
-		t.Errorf("User creation failed: %v", err)
+		t.Fatalf("User creation failed: %v", err)
 	}
-	// Verify that the password was hashed and does not equal the plain text.
-	if user.Password == "password" {
-		t.Error("Expected password to be hashed, but it remains in plain text")
+	// Verify that the plain text password is replaced with a hashed one.
+	if user.Password == "Test1234!" {
+		t.Errorf("Expected password to be hashed, but it remains in plain text")
 	}
 }
