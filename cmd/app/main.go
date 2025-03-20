@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"time"
 
 	"github.com/pageza/alchemorsel-v1/internal/config"
 	"github.com/pageza/alchemorsel-v1/internal/db"
@@ -15,9 +16,19 @@ func main() {
 		log.Fatalf("Error loading config: %v", err)
 	}
 
-	// Initialize the database connection
-	if err := db.Init(); err != nil {
-		log.Fatalf("Error initializing database: %v", err)
+	// Initialize the database connection with retry logic
+	var err error
+	maxAttempts := 10
+	for i := 1; i <= maxAttempts; i++ {
+		err = db.Init()
+		if err == nil {
+			break
+		}
+		log.Printf("Attempt %d: error initializing database: %v", i, err)
+		time.Sleep(5 * time.Second)
+	}
+	if err != nil {
+		log.Fatalf("Error initializing database after %d attempts: %v", maxAttempts, err)
 	}
 
 	// Run database migrations before starting the server
