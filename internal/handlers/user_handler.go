@@ -118,30 +118,39 @@ func DeleteUser(c *gin.Context) {
 	response.RespondSuccess(c, http.StatusOK, gin.H{"message": "user deleted"})
 }
 
-// LoginUser handles POST /v1/users/login to authenticate a user.
+// LoginUser handles POST /v1/users/login.
 func LoginUser(c *gin.Context) {
-	var req models.LoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
-		return
+	var credentials struct {
+		Email    string `json:"email" binding:"required,email"`
+		Password string `json:"password" binding:"required"`
 	}
-	// Ensure both email and password are provided.
-	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Password) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "email and password are required"})
+	if err := c.ShouldBindJSON(&credentials); err != nil {
+		response.RespondError(c, http.StatusBadRequest, "invalid request payload")
 		return
 	}
 
-	token, err := services.LoginUser(c.Request.Context(), &req)
-	if err != nil {
-		// If the error mentions a missing JWT secret, return a 500.
-		if strings.Contains(err.Error(), "JWT secret") {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+	// Check for the presence of JWT secret.
+	if os.Getenv("JWT_SECRET") == "" {
+		response.RespondError(c, http.StatusInternalServerError, "JWT secret is not set")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"token": token})
+
+	// Wrap credentials into models.LoginRequest to match the expected signature.
+	loginReq := &models.LoginRequest{
+		Email:    credentials.Email,
+		Password: credentials.Password,
+	}
+	token, err := services.LoginUser(c.Request.Context(), loginReq)
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid credentials") {
+			response.RespondError(c, http.StatusUnauthorized, "invalid email or password")
+		} else {
+			response.RespondError(c, http.StatusInternalServerError, "failed to login")
+		}
+		return
+	}
+
+	response.RespondSuccess(c, http.StatusOK, gin.H{"token": token})
 }
 
 // GetCurrentUser handles GET /v1/users/me by extracting the user ID from the authentication token.

@@ -9,11 +9,21 @@ import (
 // DB is the database connection instance
 var DB *gorm.DB
 
-// InitializeDB initializes the database connection
+// InitializeDB initializes the database connection.
+// For in-memory SQLite, forcing only one open connection ensures the DB persists.
 func InitializeDB(dsn string) error {
 	var err error
 	DB, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	return err
+	if err != nil {
+		return err
+	}
+	sqlDB, err := DB.DB()
+	if err != nil {
+		return err
+	}
+	// Limit to one connection so that the in‑memory database is shared correctly.
+	sqlDB.SetMaxOpenConns(1)
+	return nil
 }
 
 // AutoMigrate runs database migrations for our models.

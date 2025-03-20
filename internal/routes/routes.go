@@ -51,6 +51,7 @@ func SetupRouter() *gin.Engine {
 		v1.GET("/users/verify-email/:token", handlers.VerifyEmail)
 		v1.POST("/users/forgot-password", handlers.ForgotPassword)
 		v1.POST("/users/reset-password", handlers.ResetPassword)
+		v1.GET("/users/:id", handlers.GetUser)
 		// (Optional) In the future, we might add public endpoints for user lookup with proper measures.
 
 		// Recipe endpoints
