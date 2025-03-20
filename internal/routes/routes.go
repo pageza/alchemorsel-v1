@@ -87,8 +87,16 @@ func SetupRouter() *gin.Engine {
 		v1.GET("/health", handlers.HealthCheck)
 	}
 
-	// In test/integration mode, run migrations and clear users.
+	// In test/integration mode, initialize the DB and run migrations, then clear users.
 	if gin.Mode() == gin.TestMode || os.Getenv("INTEGRATION_TEST") == "true" {
+		dsn := os.Getenv("DB_SOURCE")
+		if dsn == "" {
+			logrus.Fatal("DB_SOURCE environment variable not set")
+		}
+		// Initialize the database connection.
+		if err := repositories.InitializeDB(dsn); err != nil {
+			logrus.WithError(err).Fatal("failed to initialize database")
+		}
 		if err := repositories.AutoMigrate(); err != nil {
 			logrus.WithError(err).Fatal("failed to migrate database")
 		}
