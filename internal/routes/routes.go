@@ -6,8 +6,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/handlers"
 	"github.com/pageza/alchemorsel-v1/internal/middleware"
+	"github.com/pageza/alchemorsel-v1/internal/repositories"
 
 	"strings"
+
+	"github.com/sirupsen/logrus"
 )
 
 // SetupRouter sets up the Gin routes for the API.
@@ -82,6 +85,16 @@ func SetupRouter() *gin.Engine {
 
 		// Health-check endpoint to support TestHealthCheck.
 		v1.GET("/health", handlers.HealthCheck)
+	}
+
+	// In test/integration mode, run migrations and clear users.
+	if gin.Mode() == gin.TestMode || os.Getenv("INTEGRATION_TEST") == "true" {
+		if err := repositories.AutoMigrate(); err != nil {
+			logrus.WithError(err).Fatal("failed to migrate database")
+		}
+		if err := repositories.ClearUsers(); err != nil {
+			logrus.WithError(err).Fatal("failed to clear users table")
+		}
 	}
 
 	return router

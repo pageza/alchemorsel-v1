@@ -59,7 +59,7 @@ func GetUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve user"})
 		return
 	}
-	// In test or integration mode, return a dummy user for known test IDs if not found.
+	// In test/integration mode, return a dummy user for known test IDs if not found.
 	if user == nil && (gin.Mode() == gin.TestMode || os.Getenv("INTEGRATION_TEST") == "true") {
 		user = &models.User{
 			ID:            id,
@@ -125,21 +125,15 @@ func LoginUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
 		return
 	}
-
-	// Check for missing login fields and return a 400 error.
+	// Ensure both email and password are provided.
 	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Password) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "email and password are required"})
 		return
 	}
 
-	// In integration tests, if JWT_SECRET is not set, use a default secret.
-	if os.Getenv("JWT_SECRET") == "" && (gin.Mode() == gin.TestMode || os.Getenv("INTEGRATION_TEST") == "true") {
-		os.Setenv("JWT_SECRET", "testsecret")
-	}
-
 	token, err := services.LoginUser(c.Request.Context(), &req)
 	if err != nil {
-		// If error mentions missing JWT secret, return 500 for clarity in tests.
+		// If the error mentions a missing JWT secret, return a 500.
 		if strings.Contains(err.Error(), "JWT secret") {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

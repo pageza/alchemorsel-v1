@@ -117,34 +117,33 @@ func DeleteUser(ctx context.Context, id string) error {
 	return repositories.DeactivateUser(ctx, id)
 }
 
-// LoginUser authenticates a user and returns a JWT token.
+// LoginUser authenticates a user and returns a signed JWT token.
 func LoginUser(ctx context.Context, req *models.LoginRequest) (string, error) {
+	// Lookup the user by email.
 	user, err := repositories.GetUserByEmail(ctx, req.Email)
-	if err != nil || user == nil {
-		return "", appErrors.ErrInvalidCredentials
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return "", appErrors.ErrInvalidCredentials
-	}
-
-	now := time.Now()
-	user.LastLoginAt = &now
-	if err := repositories.UpdateUser(ctx, user.ID, user); err != nil {
-		zap.L().Error("failed to update last login timestamp", zap.Error(err))
-	}
-
-	secretKey := os.Getenv("JWT_SECRET")
-	if secretKey == "" {
-		return "", stdErrors.New("JWT secret is not set")
-	}
-	tokenClaims := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"id":    user.ID,
-		"email": user.Email,
-		"exp":   time.Now().Add(time.Hour * 1).Unix(),
-	})
-	tokenString, err := tokenClaims.SignedString([]byte(secretKey))
 	if err != nil {
+		return "", err
+	}
+	if user == nil {
+		return "", fmt.Errorf("invalid credentials")
+	}
+	// Validate the password.
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		return "", fmt.Errorf("invalid credentials")
+	}
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		return "", fmt.Errorf("JWT secret is not set")
+	}
+	claims := jwt.MapClaims{
+		"user_id": user.ID,
+		"email":   user.Email,
+		"exp":     time.Now().Add(24 * time.Hour).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(secret))
+	if err != nil {
+		zap.L().Error("failed to sign JWT token", zap.Error(err))
 		return "", err
 	}
 	return tokenString, nil
