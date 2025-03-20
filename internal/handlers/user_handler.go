@@ -11,25 +11,45 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/response"
 	"github.com/pageza/alchemorsel-v1/internal/services"
+	"github.com/pageza/alchemorsel-v1/internal/utils"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
 // CreateUser handles POST /v1/users
 func CreateUser(c *gin.Context) {
-	var user models.User
-	if err := c.ShouldBindJSON(&user); err != nil {
-		response.RespondError(c, http.StatusBadRequest, "invalid request payload")
+	var newUser models.User
+	if err := c.ShouldBindJSON(&newUser); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
 		return
 	}
-	// TODO:  Add structured input validation and sanitization for user registration.
-	if err := services.CreateUser(c.Request.Context(), &user); err != nil {
-		response.RespondError(c, http.StatusInternalServerError, err.Error())
+
+	// If the payload does not include an ID, generate a new one.
+	newUser.ID = strings.TrimSpace(newUser.ID)
+	if newUser.ID == "" {
+		newUser.ID = uuid.New().String() // ensure "github.com/google/uuid" or similar is imported
+	}
+
+	// Validate password (using your validation logic).
+	if err := utils.ValidatePassword(newUser.Password); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	user.Password = ""
-	response.RespondSuccess(c, http.StatusCreated, gin.H{"user": dtos.NewUserResponse(&user)})
+
+	// Attempt to create the user.
+	if err := services.CreateUser(c.Request.Context(), &newUser); err != nil {
+		// Check for duplicate email error.
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			c.JSON(http.StatusConflict, gin.H{"error": "user with this email already exists"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"user": dtos.NewUserResponse(&newUser)})
 }
 
 // GetUser handles GET /v1/users/:id

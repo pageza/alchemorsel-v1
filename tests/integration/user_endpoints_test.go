@@ -63,6 +63,9 @@ func TestUserEndpoints(t *testing.T) {
 	os.Setenv("DB_DRIVER", "sqlite")
 	os.Setenv("DB_SOURCE", "file::memory:?cache=shared")
 
+	// Force tests to disable the rate limiter.
+	os.Setenv("DISABLE_RATE_LIMITER", "true")
+
 	// Set Gin to test mode.
 	gin.SetMode(gin.TestMode)
 

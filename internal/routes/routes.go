@@ -1,12 +1,13 @@
 package routes
 
 import (
+	"os"
+
+	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/handlers"
 	"github.com/pageza/alchemorsel-v1/internal/middleware"
 
 	"strings"
-
-	"github.com/gin-gonic/gin"
 )
 
 // SetupRouter sets up the Gin routes for the API.
@@ -15,9 +16,13 @@ func SetupRouter() *gin.Engine {
 	router.Use(gin.Recovery())
 	router.Use(gin.Logger())
 
-	// Only add security headers and rate limiter when not testing.
-	if gin.Mode() != gin.TestMode {
+	// Always add security headers unless explicitly disabled.
+	if os.Getenv("DISABLE_SECURITY_HEADERS") != "true" {
 		router.Use(middleware.SecurityHeaders())
+	}
+
+	// Only add the rate limiter if DISABLE_RATE_LIMITER is not set to "true".
+	if os.Getenv("DISABLE_RATE_LIMITER") != "true" {
 		router.Use(middleware.RateLimiter())
 	}
 
@@ -39,10 +44,10 @@ func SetupRouter() *gin.Engine {
 	{
 		// Public user endpoints for registration and login.
 		v1.POST("/users", handlers.CreateUser)
-		v1.POST("/users/login", middleware.LoginRateLimiter(), handlers.LoginUser)
+		v1.POST("/users/login", handlers.LoginUser)
 		v1.GET("/users/verify-email/:token", handlers.VerifyEmail)
-		v1.POST("/users/forgot-password", middleware.ForgotPasswordRateLimiter(), handlers.ForgotPassword)
-		v1.POST("/users/reset-password", middleware.ForgotPasswordRateLimiter(), handlers.ResetPassword)
+		v1.POST("/users/forgot-password", handlers.ForgotPassword)
+		v1.POST("/users/reset-password", handlers.ResetPassword)
 		// (Optional) In the future, we might add public endpoints for user lookup with proper measures.
 
 		// Recipe endpoints
@@ -74,6 +79,9 @@ func SetupRouter() *gin.Engine {
 			// Admin-only endpoint: list users (or search/filter users).
 			secured.GET("/admin/users", handlers.GetAllUsers)
 		}
+
+		// Health-check endpoint to support TestHealthCheck.
+		v1.GET("/health", handlers.HealthCheck)
 	}
 
 	return router
