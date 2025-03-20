@@ -94,6 +94,11 @@ func LoginUser(c *gin.Context) {
 		response.RespondError(c, http.StatusBadRequest, "invalid login payload")
 		return
 	}
+	// Ensure required fields are provided.
+	if strings.TrimSpace(loginReq.Email) == "" || strings.TrimSpace(loginReq.Password) == "" {
+		response.RespondError(c, http.StatusBadRequest, "missing required fields")
+		return
+	}
 	// TODO:  Improve error handling and add instrumentation for login attempts.
 	token, err := services.LoginUser(c.Request.Context(), &loginReq)
 	if err != nil {

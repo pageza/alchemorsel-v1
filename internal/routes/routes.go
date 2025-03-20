@@ -45,6 +45,9 @@ func SetupRouter() *gin.Engine {
 			// Endpoint for updating current user's information.
 			secured.PUT("/users/me", handlers.UpdateCurrentUser)
 
+			// NEW: Add PATCH endpoint to update current user partially.
+			secured.PATCH("/users/me", handlers.PatchCurrentUser)
+
 			// Endpoint for deactivating (soft deleting) current user.
 			secured.DELETE("/users/me", handlers.DeleteCurrentUser)
 

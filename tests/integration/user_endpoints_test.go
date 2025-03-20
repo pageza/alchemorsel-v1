@@ -60,7 +60,7 @@ func TestUserEndpoints(t *testing.T) {
 			ID:       "test-user-1",
 			Name:     "Test User",
 			Email:    "testuser@example.com",
-			Password: "password",
+			Password: "Password1!",
 		}
 		payload, err := json.Marshal(newUser)
 		if err != nil {
@@ -105,7 +105,7 @@ func TestUserEndpoints(t *testing.T) {
 		// Login using the same credentials as the user created above.
 		loginPayload := map[string]string{
 			"email":    "testuser@example.com",
-			"password": "password",
+			"password": "Password1!",
 		}
 		payload, err := json.Marshal(loginPayload)
 		if err != nil {
@@ -203,15 +203,15 @@ func TestUserEndpoints(t *testing.T) {
 	// Test duplicate user registration.
 	// ----------------------------------
 	t.Run("CreateUser_Duplicate", func(t *testing.T) {
-		newUser := models.User{
-			ID:       "test-user-dup",
-			Name:     "Test User Dup",
-			Email:    "testdup@example.com",
-			Password: "password",
+		newUser := map[string]string{
+			"ID":       "test-user-duplicate",
+			"Name":     "Duplicate User",
+			"Email":    "testuser@example.com",
+			"Password": "Password1!",
 		}
 		payload, err := json.Marshal(newUser)
 		if err != nil {
-			t.Fatalf("failed to marshal new user payload: %v", err)
+			t.Fatalf("failed to marshal payload: %v", err)
 		}
 
 		// First registration should succeed.
@@ -331,7 +331,7 @@ func TestUserEndpoints(t *testing.T) {
 	t.Run("LoginUser_JWTTokenVerification", func(t *testing.T) {
 		loginPayload := map[string]string{
 			"email":    "testuser@example.com",
-			"password": "password",
+			"password": "Password1!",
 		}
 		payload, err := json.Marshal(loginPayload)
 		if err != nil {
@@ -389,7 +389,7 @@ func TestUserEndpoints(t *testing.T) {
 			ID:       "test-user-concurrent",
 			Name:     "Concurrent User",
 			Email:    "testconcurrent@example.com",
-			Password: "password",
+			Password: "Password1!",
 		}
 		payload, err := json.Marshal(newUser)
 		if err != nil {
@@ -445,7 +445,7 @@ func TestUserEndpoints(t *testing.T) {
 
 		loginPayload := map[string]string{
 			"email":    "testuser@example.com",
-			"password": "password",
+			"password": "Password1!",
 		}
 		payload, err := json.Marshal(loginPayload)
 		if err != nil {
@@ -491,7 +491,7 @@ func TestUserEndpoints(t *testing.T) {
 			ID:       "test-get-user",
 			Name:     "Get User",
 			Email:    "getuser@example.com",
-			Password: "password",
+			Password: "Password1!",
 		}
 		payload, err := json.Marshal(newUser)
 		if err != nil {
@@ -569,7 +569,7 @@ func TestAdditionalUserEndpoints(t *testing.T) {
 		"id":       "test-user-patch",
 		"name":     "Original Name",
 		"email":    "patchuser@example.com",
-		"password": "password",
+		"password": "Password1!",
 	}
 	newUserBytes, _ := json.Marshal(newUser)
 	req, _ := http.NewRequest("POST", "/v1/users", bytes.NewBuffer(newUserBytes))
@@ -690,7 +690,7 @@ func TestEmailVerification(t *testing.T) {
 	user := &models.User{
 		Name:     "Test User",
 		Email:    "testuser@example.com",
-		Password: "password",
+		Password: "Password1!",
 	}
 	if err := services.CreateUser(context.Background(), user); err != nil {
 		t.Fatalf("failed to create user: %v", err)
