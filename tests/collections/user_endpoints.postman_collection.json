@@ -176,8 +176,13 @@
         },
         "url": {
           "raw": "{{baseUrl}}/v1/users",
-          "host": ["{{baseUrl}}"],
-          "path": ["v1", "users"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "users"
+          ]
         }
       },
       "event": [
@@ -204,7 +209,7 @@
               "        password: \"password\"",
               "    };",
               "    pm.sendRequest({",
-              "        url: pm.environment.get('baseUrl') + \"/v1/users\",",
+              "        url: pm.collectionVariables.get('baseUrl') + \"/v1/users\",",
               "        method: 'POST',",
               "        header: { 'Content-Type': 'application/json' },",
               "        body: { mode: 'raw', raw: JSON.stringify(duplicatePayload) }",

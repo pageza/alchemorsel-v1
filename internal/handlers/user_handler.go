@@ -13,10 +13,9 @@ import (
 // CreateUser handles POST /v1/users
 func CreateUser(c *gin.Context) {
 	var user models.User
-	// Bind JSON from the request to the user struct.
+	// Added explicit error checking for JSON binding
 	if err := c.ShouldBindJSON(&user); err != nil {
-		zap.L().Error("failed to bind JSON", zap.Error(err))
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user payload"})
 		return
 	}
 
@@ -53,16 +52,22 @@ func DeleteUser(c *gin.Context) {
 
 // LoginUser handles POST /v1/users/login
 func LoginUser(c *gin.Context) {
-	var req models.LoginRequest
-	// Bind JSON from the request to the LoginRequest struct.
-	if err := c.ShouldBindJSON(&req); err != nil {
-		zap.L().Error("failed to bind JSON", zap.Error(err))
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
+	// Using an inline struct with binding validations for login payload.
+	var loginReq struct {
+		Email    string `json:"email" binding:"required,email"`
+		Password string `json:"password" binding:"required"`
+	}
+	// Added explicit error checking for JSON binding. This ensures missing fields produce a 400.
+	if err := c.ShouldBindJSON(&loginReq); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid login payload"})
 		return
 	}
 
 	// Call the service layer to authenticate the user and generate a token.
-	token, err := services.LoginUser(&req)
+	token, err := services.LoginUser(&models.LoginRequest{
+		Email:    loginReq.Email,
+		Password: loginReq.Password,
+	})
 	if err != nil {
 		zap.L().Error("failed to login user", zap.Error(err))
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})

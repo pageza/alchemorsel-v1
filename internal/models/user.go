@@ -2,10 +2,10 @@ package models
 
 // User represents a user of the application.
 type User struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"` // TODO: Store a hashed password instead of plain text.
+	ID       string `json:"id" binding:"required"`
+	Name     string `json:"name" binding:"required"`
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required"`
 }
 
 // LoginRequest represents the JSON payload for user login.
