@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/services"
@@ -19,9 +20,13 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
-	// Call the service layer to create the user.
+	// Attempt to create the user using the service layer.
 	if err := services.CreateUser(&user); err != nil {
-		zap.L().Error("failed to create user", zap.Error(err))
+		// Check for duplicate entry error based on the error message.
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
+			c.JSON(http.StatusConflict, gin.H{"error": "user already exists"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
 		return
 	}
