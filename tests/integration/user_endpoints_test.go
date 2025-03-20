@@ -193,4 +193,100 @@ func TestUserEndpoints(t *testing.T) {
 			t.Errorf("expected status %d, got %d", http.StatusBadRequest, resp.Code)
 		}
 	})
+
+	// ----------------------------------
+	// Test duplicate user registration.
+	// ----------------------------------
+	t.Run("CreateUser_Duplicate", func(t *testing.T) {
+		newUser := models.User{
+			ID:       "test-user-dup",
+			Name:     "Test User Dup",
+			Email:    "testdup@example.com",
+			Password: "password",
+		}
+		payload, err := json.Marshal(newUser)
+		if err != nil {
+			t.Fatalf("failed to marshal new user payload: %v", err)
+		}
+
+		// First registration should succeed.
+		req, err := http.NewRequest("POST", "/v1/users", bytes.NewBuffer(payload))
+		if err != nil {
+			t.Fatalf("failed to create request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusCreated {
+			t.Errorf("expected status %d for first registration, got %d", http.StatusCreated, resp.Code)
+		}
+
+		// Attempt duplicate registration with the same payload.
+		req, err = http.NewRequest("POST", "/v1/users", bytes.NewBuffer(payload))
+		if err != nil {
+			t.Fatalf("failed to create duplicate request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp = httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusConflict {
+			t.Errorf("expected status %d for duplicate registration, got %d", http.StatusConflict, resp.Code)
+		}
+	})
+
+	// ----------------------------------
+	// Test user registration with missing fields.
+	// ----------------------------------
+	t.Run("CreateUser_MissingFields", func(t *testing.T) {
+		// Payload missing the required "Email" field.
+		newUser := map[string]string{
+			"ID":       "test-user-missing",
+			"Name":     "Test Missing",
+			"Password": "password",
+		}
+		payload, err := json.Marshal(newUser)
+		if err != nil {
+			t.Fatalf("failed to marshal payload: %v", err)
+		}
+
+		req, err := http.NewRequest("POST", "/v1/users", bytes.NewBuffer(payload))
+		if err != nil {
+			t.Fatalf("failed to create request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusBadRequest {
+			t.Errorf("expected status %d for missing fields, got %d", http.StatusBadRequest, resp.Code)
+		}
+	})
+
+	// ----------------------------------
+	// Test login with missing required fields.
+	// ----------------------------------
+	t.Run("LoginUser_MissingFields", func(t *testing.T) {
+		// Payload missing the required "password" field.
+		loginPayload := map[string]string{
+			"email": "testuser@example.com",
+		}
+		payload, err := json.Marshal(loginPayload)
+		if err != nil {
+			t.Fatalf("failed to marshal login payload: %v", err)
+		}
+
+		req, err := http.NewRequest("POST", "/v1/users/login", bytes.NewBuffer(payload))
+		if err != nil {
+			t.Fatalf("failed to create login request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusBadRequest {
+			t.Errorf("expected status %d for missing login fields, got %d", http.StatusBadRequest, resp.Code)
+		}
+	})
 }

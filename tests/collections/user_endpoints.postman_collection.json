@@ -56,7 +56,7 @@
       "response": []
     },
     {
-      "name": "Login User - Invalid Credentials",
+      "name": "Login User - Invalid JSON",
       "request": {
         "method": "POST",
         "header": [
@@ -67,7 +67,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"wrongpassword\"\n}"
+          "raw": "{\n  \"email\": \"testuser@example.com\"\n  \"password\": \"password\"\n"
         },
         "url": {
           "raw": "{{baseUrl}}/v1/users/login",
@@ -75,6 +75,154 @@
           "path": ["v1", "users", "login"]
         }
       },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Create User - Missing Fields",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"test-user-missing\",\n  \"name\": \"Test Missing\",\n  \"password\": \"password\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "users"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Login User - Missing Fields",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"testuser@example.com\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/users/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "users", "login"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Create User - Duplicate",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"test-user-dup\",\n  \"name\": \"Test User Dup\",\n  \"email\": \"testdup@example.com\",\n  \"password\": \"password\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "users"]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Ensure no previous duplicate registration exists",
+              "pm.environment.unset('duplicateTestDone');"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    // On first registration, immediately send a duplicate registration request",
+              "    var duplicatePayload = {",
+              "        id: \"test-user-dup\",",
+              "        name: \"Test User Dup\",",
+              "        email: \"testdup@example.com\",",
+              "        password: \"password\"",
+              "    };",
+              "    pm.sendRequest({",
+              "        url: pm.environment.get('baseUrl') + \"/v1/users\",",
+              "        method: 'POST',",
+              "        header: { 'Content-Type': 'application/json' },",
+              "        body: { mode: 'raw', raw: JSON.stringify(duplicatePayload) }",
+              "    }, function (err, res) {",
+              "        pm.test(\"Duplicate registration returns 409\", function () {",
+              "            pm.expect(res.code).to.eql(409);",
+              "        });",
+              "    });",
+              "} else {",
+              "    pm.test(\"Expected 201 for first registration\", function () {",
+              "        pm.response.to.have.status(201);",
+              "    });",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
       "response": []
     }
   ]
