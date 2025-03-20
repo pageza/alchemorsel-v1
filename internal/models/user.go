@@ -10,6 +10,7 @@ type User struct {
 	Name      string         `json:"name" binding:"required"`
 	Email     string         `json:"email" binding:"required,email"`
 	Password  string         `json:"password" binding:"required"`
+	IsAdmin   bool           `json:"is_admin" gorm:"default:false"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 }
 

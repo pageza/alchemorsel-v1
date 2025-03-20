@@ -4,6 +4,9 @@ import (
 	"net/http"
 	"strings"
 
+	stdErrors "errors"
+
+	almerrors "github.com/pageza/alchemorsel-v1/internal/errors"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/services"
 
@@ -42,8 +45,7 @@ func GetUser(c *gin.Context) {
 	id := c.Param("id")
 	user, err := services.GetUser(id)
 	if err != nil {
-		// If the error message indicates the user was not found, return a 404.
-		if strings.Contains(err.Error(), "not found") {
+		if stdErrors.Is(err, almerrors.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 			return
 		}
@@ -72,7 +74,7 @@ func LoginUser(c *gin.Context) {
 		Email    string `json:"email" binding:"required,email"`
 		Password string `json:"password" binding:"required"`
 	}
-	// Added explicit error checking for JSON binding. This ensures missing fields produce a 400.
+	// Added explicit error checking for JSON binding.
 	if err := c.ShouldBindJSON(&loginReq); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid login payload"})
 		return
@@ -85,7 +87,11 @@ func LoginUser(c *gin.Context) {
 	})
 	if err != nil {
 		zap.L().Error("failed to login user", zap.Error(err))
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		if stdErrors.Is(err, almerrors.ErrAccountDeactivated) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "account is deactivated"})
+		} else {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		}
 		return
 	}
 
@@ -131,10 +137,10 @@ func UpdateCurrentUser(c *gin.Context) {
 		return
 	}
 
-	// Create an update model (only allowed fields).
+	// NEW: Trim whitespace from incoming fields.
 	updatedUser := &models.User{
-		Name:  updatePayload.Name,
-		Email: updatePayload.Email,
+		Name:  strings.TrimSpace(updatePayload.Name),
+		Email: strings.TrimSpace(updatePayload.Email),
 	}
 
 	if err := services.UpdateUser(currentUser.(string), updatedUser); err != nil {
@@ -169,8 +175,22 @@ func DeleteCurrentUser(c *gin.Context) {
 }
 
 // GetAllUsers handles GET /admin/users for admin functionality.
-// TODO: In production, add an admin authorization check before returning the users list.
 func GetAllUsers(c *gin.Context) {
+	currentUser, exists := c.Get("currentUser")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user, err := services.GetUser(currentUser.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve current user"})
+		return
+	}
+	if !user.IsAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
 	users, err := services.GetAllUsers()
 	if err != nil {
 		zap.L().Error("failed to retrieve users", zap.Error(err))
@@ -196,6 +216,19 @@ func PatchCurrentUser(c *gin.Context) {
 	if err := c.ShouldBindJSON(&patchPayload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid update payload"})
 		return
+	}
+
+	// NEW: Filter patchPayload to only allow "name" and "email".
+	allowedFields := map[string]bool{
+		"name":  true,
+		"email": true,
+	}
+	for key, value := range patchPayload {
+		if !allowedFields[key] {
+			delete(patchPayload, key)
+		} else if str, ok := value.(string); ok {
+			patchPayload[key] = strings.TrimSpace(str)
+		}
 	}
 
 	if err := services.PatchUser(currentUser.(string), patchPayload); err != nil {
