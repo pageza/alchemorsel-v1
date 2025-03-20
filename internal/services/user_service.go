@@ -262,3 +262,8 @@ func ResetPassword(ctx context.Context, token, newPassword string) error {
 	zap.L().Info("Password reset successfully", zap.String("userID", user.ID))
 	return repositories.UpdateUser(ctx, user.ID, user)
 }
+
+// GetUserByEmail retrieves a user by email.
+func GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	return repositories.GetUserByEmail(ctx, email)
+}
