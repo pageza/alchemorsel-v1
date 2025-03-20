@@ -81,10 +81,13 @@ func TestUserEndpoints(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &responseBody); err != nil {
 			t.Errorf("failed to unmarshal response: %v", err)
 		}
-		// Assume the created user response is returned under "user".
 		userResp, exists := responseBody["user"]
 		if !exists {
 			t.Error("response does not contain 'user' field")
+		}
+		// Verify that the returned email matches the input email.
+		if email, ok := userResp["email"].(string); !ok || email != newUser["email"] {
+			t.Errorf("expected email %s, got %v", newUser["email"], userResp["email"])
 		}
 		// Optionally store login credentials if needed.
 	})
