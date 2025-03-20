@@ -537,3 +537,144 @@ func TestUserEndpoints(t *testing.T) {
 		}
 	})
 }
+
+func TestAdditionalUserEndpoints(t *testing.T) {
+	router := routes.SetupRouter()
+
+	// Subtest: Access protected endpoint without token.
+	t.Run("AccessProtectedEndpoint_NoToken", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "/v1/users/me", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("Expected status 401 for missing token, got: %d", w.Code)
+		}
+	})
+
+	// Subtest: Access protected endpoint with invalid token.
+	t.Run("AccessProtectedEndpoint_InvalidToken", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "/v1/users/me", nil)
+		req.Header.Set("Authorization", "Bearer invalidtoken")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("Expected status 401 for invalid token, got: %d", w.Code)
+		}
+	})
+
+	// Create a test user to obtain a valid token.
+	newUser := map[string]string{
+		"id":       "test-user-patch",
+		"name":     "Original Name",
+		"email":    "patchuser@example.com",
+		"password": "password",
+	}
+	newUserBytes, _ := json.Marshal(newUser)
+	req, _ := http.NewRequest("POST", "/v1/users", bytes.NewBuffer(newUserBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("Failed to create user, expected 201, got %d", w.Code)
+	}
+
+	// Login the user to get a token.
+	loginPayload := map[string]string{
+		"email":    newUser["email"],
+		"password": newUser["password"],
+	}
+	loginBytes, _ := json.Marshal(loginPayload)
+	req, _ = http.NewRequest("POST", "/v1/users/login", bytes.NewBuffer(loginBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Failed to login, expected 200, got %d", w.Code)
+	}
+	var loginResp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &loginResp); err != nil {
+		t.Fatalf("Failed to unmarshal login response: %v", err)
+	}
+	token, ok := loginResp["token"]
+	if !ok || token == "" {
+		t.Fatalf("Token not found in login response")
+	}
+
+	// Subtest: Test PATCH /v1/users/me to update the user partially.
+	t.Run("PatchCurrentUser", func(t *testing.T) {
+		patchPayload := map[string]interface{}{
+			"name":       "Updated Name",
+			"unexpected": "should be ignored",
+		}
+		patchBytes, _ := json.Marshal(patchPayload)
+		req, _ := http.NewRequest("PATCH", "/v1/users/me", bytes.NewBuffer(patchBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200 for patch current user, got %d", w.Code)
+		}
+		var patchResp map[string]models.User
+		if err := json.Unmarshal(w.Body.Bytes(), &patchResp); err != nil {
+			t.Errorf("Failed to unmarshal patch response: %v", err)
+		}
+		updatedUser, exists := patchResp["user"]
+		if !exists {
+			t.Errorf("Patch response missing 'user' field")
+		}
+		if updatedUser.Name != "Updated Name" {
+			t.Errorf("Expected name to be updated to 'Updated Name', got: %s", updatedUser.Name)
+		}
+		// Ensure that the email remains unchanged.
+		if updatedUser.Email != newUser["email"] {
+			t.Errorf("Expected email to remain unchanged as %s, got: %s", newUser["email"], updatedUser.Email)
+		}
+	})
+
+	// Subtest: Test PUT /v1/users/me with invalid payload.
+	t.Run("UpdateCurrentUser_InvalidPayload", func(t *testing.T) {
+		req, _ := http.NewRequest("PUT", "/v1/users/me", bytes.NewBuffer([]byte(`{"name": "New Name"`)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Expected status 400 for invalid payload, got %d", w.Code)
+		}
+	})
+
+	// Subtest: Test admin endpoint unauthorized access.
+	t.Run("AdminEndpoint_NoToken", func(t *testing.T) {
+		req, _ := http.NewRequest("GET", "/v1/admin/users", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("Expected status 401 for admin endpoint without token, got %d", w.Code)
+		}
+	})
+
+	// Subtest: Test login rate limiter by sending rapid login requests.
+	t.Run("LoginRateLimiter", func(t *testing.T) {
+		var wg sync.WaitGroup
+		numRequests := 10
+		rateLimitExceeded := false
+		for i := 0; i < numRequests; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				req, _ := http.NewRequest("POST", "/v1/users/login", bytes.NewBuffer(loginBytes))
+				req.Header.Set("Content-Type", "application/json")
+				w := httptest.NewRecorder()
+				router.ServeHTTP(w, req)
+				if w.Code == http.StatusTooManyRequests {
+					rateLimitExceeded = true
+				}
+			}()
+		}
+		wg.Wait()
+		if !rateLimitExceeded {
+			t.Errorf("Expected at least one request to be rate limited, but none were")
+		}
+	})
+}
