@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/handlers"
 	"github.com/pageza/alchemorsel-v1/internal/middleware"
+	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 
 	"strings"
@@ -88,7 +89,7 @@ func SetupRouter() *gin.Engine {
 		v1.GET("/health", handlers.HealthCheck)
 	}
 
-	// In test/integration mode, initialize the DB and run migrations, then clear users.
+	// In test/integration mode, initialize the DB, run migrations, then clear users.
 	if gin.Mode() == gin.TestMode || os.Getenv("INTEGRATION_TEST") == "true" {
 		dsn := os.Getenv("DB_SOURCE")
 		if dsn == "" {
@@ -103,6 +104,16 @@ func SetupRouter() *gin.Engine {
 		}
 		if err := repositories.ClearUsers(); err != nil {
 			logrus.WithError(err).Fatal("failed to clear users table")
+		}
+		// Insert a dummy user with ID "1" for the health check endpoint.
+		dummyUser := models.User{
+			ID:       "1",
+			Name:     "Dummy User",
+			Email:    "dummy@example.com",
+			Password: "dummy", // Replace with appropriate hashed password if needed.
+		}
+		if err := repositories.DB.Create(&dummyUser).Error; err != nil {
+			logrus.WithError(err).Fatal("failed to create dummy user")
 		}
 	}
 

@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"time"
+
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -23,6 +25,9 @@ func InitializeDB(dsn string) error {
 	}
 	// Limit to one connection so that the in‑memory database is shared correctly.
 	sqlDB.SetMaxOpenConns(1)
+	// Ensure the single connection remains available.
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(time.Hour)
 	return nil
 }
 
