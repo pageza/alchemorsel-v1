@@ -44,8 +44,14 @@ jobs:
       - name: Build Docker image
         run: docker build -t recipeservice .
 
+      - name: Create Docker network for CI tests
+        run: docker network create ci_network || true
+
+      - name: Start Postgres container for CI tests
+        run: docker run -d --name postgres --network ci_network -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=ci_password -e POSTGRES_DB=ci_recipesdb -p 5432:5432 ankane/pgvector
+
       - name: Run Docker container for E2E tests
-        run: docker run -d --env-file .env.ci -p 8080:8080 --name recipeservice recipeservice
+        run: docker run -d --env-file .env.ci --network ci_network -p 8080:8080 --name recipeservice recipeservice
 
       - name: Wait for service to be ready
         run: |
