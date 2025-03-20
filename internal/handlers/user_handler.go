@@ -23,6 +23,7 @@ func CreateUser(c *gin.Context) {
 		response.RespondError(c, http.StatusBadRequest, "invalid request payload")
 		return
 	}
+	// TODO [cursor--TODO]: Add structured input validation and sanitization for user registration.
 	if err := services.CreateUser(c.Request.Context(), &user); err != nil {
 		response.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -57,6 +58,7 @@ func UpdateUser(c *gin.Context) {
 		response.RespondError(c, http.StatusBadRequest, "invalid update payload")
 		return
 	}
+	// TODO [cursor--TODO]: Enhance update payload validation (e.g., check for duplicate emails) and add audit logging.
 	updatedUser := &models.User{
 		Name:  strings.TrimSpace(updatePayload.Name),
 		Email: strings.TrimSpace(updatePayload.Email),
@@ -65,6 +67,7 @@ func UpdateUser(c *gin.Context) {
 		response.RespondError(c, http.StatusInternalServerError, "failed to update user")
 		return
 	}
+	// TODO [cursor--TODO]: Consider caching the updated user to improve performance.
 	user, err := services.GetUser(c.Request.Context(), id)
 	if err != nil {
 		response.RespondError(c, http.StatusInternalServerError, "failed to retrieve updated user")
@@ -76,6 +79,7 @@ func UpdateUser(c *gin.Context) {
 // DeleteUser handles DELETE /v1/users/:id
 func DeleteUser(c *gin.Context) {
 	id := c.Param("id")
+	// TODO [cursor--TODO]: Add logging for deletion events and notify the event stream as needed.
 	if err := services.DeleteUser(c.Request.Context(), id); err != nil {
 		response.RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -90,6 +94,7 @@ func LoginUser(c *gin.Context) {
 		response.RespondError(c, http.StatusBadRequest, "invalid login payload")
 		return
 	}
+	// TODO [cursor--TODO]: Improve error handling and add instrumentation for login attempts.
 	token, err := services.LoginUser(c.Request.Context(), &loginReq)
 	if err != nil {
 		response.RespondError(c, http.StatusUnauthorized, "invalid credentials")
@@ -105,7 +110,7 @@ func GetCurrentUser(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-
+	// TODO [cursor--TODO]: Consider caching the current user session for performance gains.
 	user, err := services.GetUser(c.Request.Context(), userID.(string))
 	if err != nil {
 		response.RespondError(c, http.StatusNotFound, "User not found")
@@ -122,35 +127,28 @@ func UpdateCurrentUser(c *gin.Context) {
 		return
 	}
 
-	// Define a request struct for update payload.
 	var updatePayload struct {
 		Name  string `json:"name" binding:"omitempty"`
 		Email string `json:"email" binding:"omitempty,email"`
 	}
-
 	if err := c.ShouldBindJSON(&updatePayload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid update payload"})
 		return
 	}
-
-	// NEW: Trim whitespace from incoming fields.
+	// TODO [cursor--TODO]: Incorporate audit logging and advanced input validations here.
 	updatedUser := &models.User{
 		Name:  strings.TrimSpace(updatePayload.Name),
 		Email: strings.TrimSpace(updatePayload.Email),
 	}
-
 	if err := services.UpdateUser(c.Request.Context(), currentUser.(string), updatedUser); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})
 		return
 	}
-
-	// Retrieve and return the updated user.
 	user, err := services.GetUser(c.Request.Context(), currentUser.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve updated user"})
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{"user": dtos.NewUserResponse(user)})
 }
 
@@ -161,12 +159,11 @@ func DeleteCurrentUser(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-
+	// TODO [cursor--TODO]: Add deactivation event logging and user notification mechanisms.
 	if err := services.DeactivateUser(c.Request.Context(), currentUser.(string)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to deactivate user"})
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{"message": "user deactivated successfully"})
 }
 
@@ -192,7 +189,7 @@ func GetAllUsers(c *gin.Context) {
 		response.RespondError(c, http.StatusInternalServerError, "failed to retrieve users")
 		return
 	}
-	// Convert each user to a DTO to ensure consistency and preserve filtered data.
+	// TODO [cursor--TODO]: Implement pagination, filtering, and search for a scalable admin user list.
 	var userDTOs []dtos.UserResponse
 	for _, u := range users {
 		userDTOs = append(userDTOs, dtos.NewUserResponse(u))
@@ -214,7 +211,7 @@ func PatchCurrentUser(c *gin.Context) {
 		return
 	}
 
-	// NEW: Filter patchPayload to only allow "name" and "email".
+	// TODO [cursor--TODO]: Enhance patch payload validation and consider supporting additional fields in the future.
 	allowedFields := map[string]bool{
 		"name":  true,
 		"email": true,
@@ -249,14 +246,13 @@ func VerifyEmail(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired token"})
 		return
 	}
-
+	// TODO [cursor--TODO]: Log email verification attempts and handle token expiration more robustly.
 	user.EmailVerified = true
 	user.EmailVerificationToken = "" // Clear the token after verification
 	if err := services.UpdateUser(c.Request.Context(), user.ID, user); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify email"})
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{"message": "email verified successfully"})
 }
 
@@ -269,12 +265,12 @@ func ForgotPassword(c *gin.Context) {
 		response.RespondError(c, http.StatusBadRequest, "invalid payload")
 		return
 	}
+	// TODO [cursor--TODO]: Integrate with an email service to send password reset notifications.
 	if err := services.ForgotPassword(c.Request.Context(), req.Email); err != nil {
 		zap.L().Error("failed to process forgot password", zap.Error(err))
 		response.RespondError(c, http.StatusInternalServerError, "failed to process forgot password")
 		return
 	}
-	// In production, an email would be sent with the reset link.
 	response.RespondSuccess(c, http.StatusOK, gin.H{"message": "password reset link sent"})
 }
 
