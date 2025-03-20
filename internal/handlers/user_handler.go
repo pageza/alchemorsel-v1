@@ -48,8 +48,29 @@ func GetUser(c *gin.Context) {
 
 // UpdateUser handles PUT /v1/users/:id
 func UpdateUser(c *gin.Context) {
-	// TODO: Parse request and update user details via service layer.
-	c.JSON(http.StatusOK, gin.H{"message": "UpdateUser endpoint - TODO: implement logic"})
+	id := c.Param("id")
+	var updatePayload struct {
+		Name  string `json:"name" binding:"omitempty"`
+		Email string `json:"email" binding:"omitempty,email"`
+	}
+	if err := c.ShouldBindJSON(&updatePayload); err != nil {
+		response.RespondError(c, http.StatusBadRequest, "invalid update payload")
+		return
+	}
+	updatedUser := &models.User{
+		Name:  strings.TrimSpace(updatePayload.Name),
+		Email: strings.TrimSpace(updatePayload.Email),
+	}
+	if err := services.UpdateUser(c.Request.Context(), id, updatedUser); err != nil {
+		response.RespondError(c, http.StatusInternalServerError, "failed to update user")
+		return
+	}
+	user, err := services.GetUser(c.Request.Context(), id)
+	if err != nil {
+		response.RespondError(c, http.StatusInternalServerError, "failed to retrieve updated user")
+		return
+	}
+	response.RespondSuccess(c, http.StatusOK, gin.H{"user": dtos.NewUserResponse(user)})
 }
 
 // DeleteUser handles DELETE /v1/users/:id
@@ -153,30 +174,30 @@ func DeleteCurrentUser(c *gin.Context) {
 func GetAllUsers(c *gin.Context) {
 	currentUser, exists := c.Get("currentUser")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		response.RespondError(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 	user, err := services.GetUser(c.Request.Context(), currentUser.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve current user"})
+		response.RespondError(c, http.StatusInternalServerError, "failed to retrieve current user")
 		return
 	}
 	if !user.IsAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		response.RespondError(c, http.StatusForbidden, "forbidden")
 		return
 	}
-
 	users, err := services.GetAllUsers(c.Request.Context())
 	if err != nil {
 		zap.L().Error("failed to retrieve users", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve users"})
+		response.RespondError(c, http.StatusInternalServerError, "failed to retrieve users")
 		return
 	}
-	// Omit the password for security.
-	for i := range users {
-		users[i].Password = ""
+	// Convert each user to a DTO to ensure consistency and preserve filtered data.
+	var userDTOs []dtos.UserResponse
+	for _, u := range users {
+		userDTOs = append(userDTOs, dtos.NewUserResponse(u))
 	}
-	c.JSON(http.StatusOK, gin.H{"users": users})
+	response.RespondSuccess(c, http.StatusOK, gin.H{"users": userDTOs})
 }
 
 // PatchCurrentUser handles PATCH /v1/users/me to update the current user's profile.
