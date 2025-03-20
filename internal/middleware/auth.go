@@ -9,15 +9,21 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 )
 
+// AuthMiddleware performs token validation for protected routes.
+// Bypass occurs only if DISABLE_AUTH is explicitly set.
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Expecting the header to be: "Bearer <token>"
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Missing Authorization header"})
+		if os.Getenv("DISABLE_AUTH") == "true" {
+			c.Next()
 			return
 		}
-
+		// Expect an Authorization header.
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
+			return
+		}
+		// Expecting the header to be: "Bearer <token>"
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			return []byte(os.Getenv("JWT_SECRET")), nil

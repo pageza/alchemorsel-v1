@@ -53,3 +53,22 @@ func ForgotPasswordRateLimiter() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// ResetLimiters resets the global limiters (useful in tests).
+func ResetLimiters() {
+	// If TEST_RATE_LIMIT_STRICT or INTEGRATION_TEST is set, use a limiter that blocks every request after the first.
+	if os.Getenv("TEST_RATE_LIMIT_STRICT") == "true" || os.Getenv("INTEGRATION_TEST") == "true" {
+		loginLimiter = rate.NewLimiter(0, 1)
+		forgotPasswordLimiter = rate.NewLimiter(0, 1)
+	} else if gin.Mode() == gin.TestMode {
+		loginLimiter = rate.NewLimiter(0.1, 1)
+		forgotPasswordLimiter = rate.NewLimiter(0.1, 1)
+	} else {
+		loginLimiter = rate.NewLimiter(1, 3)
+		forgotPasswordLimiter = rate.NewLimiter(1, 3)
+	}
+}
+
+func init() {
+	ResetLimiters()
+}

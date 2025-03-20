@@ -9,15 +9,15 @@ import (
 )
 
 func TestHealthCheck(t *testing.T) {
-	// Setup router
+	// Initialize the router first to set up DB and routes.
 	router := routes.SetupRouter()
-
-	// Create a test request to /v1/users/1 as a placeholder test.
-	req, _ := http.NewRequest("GET", "/v1/users/1", nil)
+	// No need to call resetDB here since the health endpoint does not depend on user records.
+	// Call the proper health check endpoint instead of /v1/users/1.
+	req, _ := http.NewRequest("GET", "/v1/health", nil)
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, req)
 
-	// Expect a response code (the endpoints are not fully implemented)
+	// Expect a 200 response.
 	if resp.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.Code)
 	}

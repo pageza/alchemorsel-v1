@@ -11,6 +11,7 @@ import (
 
 	"strings"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/sirupsen/logrus"
 )
 
@@ -35,9 +36,21 @@ func SetupRouter() *gin.Engine {
 		router.Use(func(c *gin.Context) {
 			authHeader := c.GetHeader("Authorization")
 			if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
-				// For testing purposes, assume the token itself is the user ID.
-				token := strings.TrimPrefix(authHeader, "Bearer ")
-				c.Set("currentUser", token)
+				rawToken := strings.TrimPrefix(authHeader, "Bearer ")
+				secret := os.Getenv("JWT_SECRET")
+				parsedToken, err := jwt.Parse(rawToken, func(token *jwt.Token) (interface{}, error) {
+					return []byte(secret), nil
+				})
+				if err == nil && parsedToken.Valid {
+					if claims, ok := parsedToken.Claims.(jwt.MapClaims); ok {
+						if id, ok := claims["id"].(string); ok {
+							c.Set("currentUser", id)
+						}
+					}
+				} else {
+					// Fallback: if token parsing fails, set the raw token.
+					c.Set("currentUser", rawToken)
+				}
 			}
 			c.Next()
 		})
@@ -48,7 +61,7 @@ func SetupRouter() *gin.Engine {
 	{
 		// Public user endpoints for registration and login.
 		v1.POST("/users", handlers.CreateUser)
-		v1.POST("/users/login", handlers.LoginUser)
+		v1.POST("/users/login", middleware.LoginRateLimiter(), handlers.LoginUser)
 		v1.GET("/users/verify-email/:token", handlers.VerifyEmail)
 		v1.POST("/users/forgot-password", handlers.ForgotPassword)
 		v1.POST("/users/reset-password", handlers.ResetPassword)
@@ -112,7 +125,8 @@ func SetupRouter() *gin.Engine {
 			Email:    "dummy@example.com",
 			Password: "dummy", // Replace with appropriate hashed password if needed.
 		}
-		if err := repositories.DB.Create(&dummyUser).Error; err != nil {
+		// Use FirstOrCreate so that if the dummy user already exists it won't trigger a UNIQUE constraint error.
+		if err := repositories.DB.FirstOrCreate(&dummyUser, models.User{ID: "1"}).Error; err != nil {
 			logrus.WithError(err).Fatal("failed to create dummy user")
 		}
 	}
