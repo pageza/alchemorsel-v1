@@ -89,20 +89,21 @@ func DeleteUser(id string) error {
 
 // LoginUser authenticates a user and returns a JWT token.
 func LoginUser(req *models.LoginRequest) (string, error) {
-	// Retrieve user by email.
 	user, err := repositories.GetUserByEmail(req.Email)
 	if err != nil || user == nil {
-		return "", stdErrors.New("invalid credentials")
+		return "", appErrors.ErrInvalidCredentials
 	}
 
-	// With soft deletion in place, deleted users are not returned by default.
-
-	// Compare the provided password with the stored hashed password.
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return "", stdErrors.New("invalid credentials")
+		return "", appErrors.ErrInvalidCredentials
 	}
 
-	// Generate JWT token using "id" as claim key to match the middleware.
+	now := time.Now()
+	user.LastLoginAt = &now
+	if err := repositories.UpdateUser(user.ID, user); err != nil {
+		zap.L().Error("failed to update last login timestamp", zap.Error(err))
+	}
+
 	secretKey := os.Getenv("JWT_SECRET")
 	if secretKey == "" {
 		return "", stdErrors.New("JWT secret is not set")

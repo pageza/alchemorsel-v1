@@ -1,17 +1,24 @@
 package models
 
 import (
+	"time"
+
 	"gorm.io/gorm"
 )
 
 // User represents a user of the application.
 type User struct {
-	ID        string         `json:"id"`
-	Name      string         `json:"name" binding:"required"`
-	Email     string         `json:"email" binding:"required,email"`
-	Password  string         `json:"password" binding:"required"`
-	IsAdmin   bool           `json:"is_admin" gorm:"default:false"`
-	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
+	ID            string         `json:"id"`
+	Name          string         `json:"name" binding:"required"`
+	Email         string         `json:"email" binding:"required,email"`
+	Password      string         `json:"password" binding:"required"`
+	IsAdmin       bool           `json:"is_admin" gorm:"default:false"`
+	EmailVerified bool           `json:"email_verified" gorm:"default:false"`
+	LastLoginAt   *time.Time     `json:"last_login_at"`
+	LastActiveAt  *time.Time     `json:"last_active_at"`
+	DeletedAt     gorm.DeletedAt `json:"deleted_at" gorm:"index"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
 // LoginRequest represents the JSON payload for user login.

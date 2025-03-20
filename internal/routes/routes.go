@@ -11,6 +11,9 @@ import (
 func SetupRouter() *gin.Engine {
 	router := gin.Default()
 
+	// NEW: Add security headers middleware globally.
+	router.Use(middleware.SecurityHeaders())
+
 	// Grouping versioned API routes
 	v1 := router.Group("/v1")
 	{
