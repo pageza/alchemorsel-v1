@@ -21,6 +21,8 @@ func SetupRouter() *gin.Engine {
 		v1.POST("/users", handlers.CreateUser)
 		v1.POST("/users/login", middleware.LoginRateLimiter(), handlers.LoginUser)
 		v1.GET("/users/verify-email/:token", handlers.VerifyEmail)
+		v1.POST("/users/forgot-password", middleware.ForgotPasswordRateLimiter(), handlers.ForgotPassword)
+		v1.POST("/users/reset-password", middleware.ForgotPasswordRateLimiter(), handlers.ResetPassword)
 		// (Optional) In the future, we might add public endpoints for user lookup with proper measures.
 
 		// Recipe endpoints

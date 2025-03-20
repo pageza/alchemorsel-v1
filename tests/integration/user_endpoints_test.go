@@ -2,6 +2,7 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -691,7 +692,7 @@ func TestEmailVerification(t *testing.T) {
 		Email:    "testuser@example.com",
 		Password: "password",
 	}
-	if err := services.CreateUser(user); err != nil {
+	if err := services.CreateUser(context.Background(), user); err != nil {
 		t.Fatalf("failed to create user: %v", err)
 	}
 

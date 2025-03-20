@@ -1,6 +1,7 @@
 package unit
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -36,7 +37,7 @@ func TestCreateUser(t *testing.T) {
 		Email:    "test@example.com",
 		Password: "password", // Plain text password to be hashed.
 	}
-	err := services.CreateUser(user)
+	err := services.CreateUser(context.Background(), user)
 	if err != nil {
 		t.Errorf("User creation failed: %v", err)
 	}
