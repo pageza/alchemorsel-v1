@@ -23,8 +23,10 @@ import (
 
 // CreateUser creates a new user.
 func CreateUser(ctx context.Context, user *models.User) error {
-	// Always override any provided ID with a new UUID.
-	user.ID = uuid.NewString()
+	// Instead of always overriding, only generate a new ID if none is provided.
+	if user.ID == "" {
+		user.ID = uuid.NewString()
+	}
 
 	if user.Password == "" {
 		return stdErrors.New("password required")
