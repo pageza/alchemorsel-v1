@@ -479,4 +479,61 @@ func TestUserEndpoints(t *testing.T) {
 			t.Errorf("expected status %d for non-existent user, got %d", http.StatusNotFound, resp.Code)
 		}
 	})
+
+	// ----------------------------------
+	// Test GetUser endpoint for a successful retrieval.
+	// ----------------------------------
+	t.Run("GetUser_Success", func(t *testing.T) {
+		// First, create a new user.
+		newUser := models.User{
+			ID:       "test-get-user",
+			Name:     "Get User",
+			Email:    "getuser@example.com",
+			Password: "password",
+		}
+		payload, err := json.Marshal(newUser)
+		if err != nil {
+			t.Fatalf("failed to marshal new user payload: %v", err)
+		}
+
+		req, err := http.NewRequest("POST", "/v1/users", bytes.NewBuffer(payload))
+		if err != nil {
+			t.Fatalf("failed to create user creation request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusCreated {
+			t.Fatalf("expected user creation status %d, got %d", http.StatusCreated, resp.Code)
+		}
+
+		// Now, retrieve the user with a GET request.
+		req, err = http.NewRequest("GET", "/v1/users/test-get-user", nil)
+		if err != nil {
+			t.Fatalf("failed to create GET request: %v", err)
+		}
+		resp = httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected status %d for get user, got %d", http.StatusOK, resp.Code)
+		}
+
+		// Decode the response and validate the user details.
+		var responseBody map[string]models.User
+		if err := json.Unmarshal(resp.Body.Bytes(), &responseBody); err != nil {
+			t.Fatalf("failed to unmarshal get user response: %v", err)
+		}
+		userResp, exists := responseBody["user"]
+		if !exists {
+			t.Fatalf("response does not contain 'user' field")
+		}
+		if userResp.ID != newUser.ID || userResp.Name != newUser.Name || userResp.Email != newUser.Email {
+			t.Errorf("returned user does not match the created user")
+		}
+		// Ensure that the password has been omitted.
+		if userResp.Password != "" {
+			t.Errorf("expected password to be omitted, got %s", userResp.Password)
+		}
+	})
 }

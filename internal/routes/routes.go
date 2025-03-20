@@ -2,6 +2,7 @@ package routes
 
 import (
 	"github.com/pageza/alchemorsel-v1/internal/handlers"
+	"github.com/pageza/alchemorsel-v1/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,12 +14,10 @@ func SetupRouter() *gin.Engine {
 	// Grouping versioned API routes
 	v1 := router.Group("/v1")
 	{
-		// User endpoints
+		// Public user endpoints for registration and login.
 		v1.POST("/users", handlers.CreateUser)
-		v1.POST("/users/login", handlers.LoginUser)
-		v1.GET("/users/:id", handlers.GetUser)
-		v1.PUT("/users/:id", handlers.UpdateUser)
-		v1.DELETE("/users/:id", handlers.DeleteUser)
+		v1.POST("/users/login", middleware.LoginRateLimiter(), handlers.LoginUser)
+		// (Optional) In the future, we might add public endpoints for user lookup with proper measures.
 
 		// Recipe endpoints
 		v1.GET("/recipes", handlers.ListRecipes)
@@ -29,6 +28,23 @@ func SetupRouter() *gin.Engine {
 
 		// Recipe resolution endpoint
 		v1.POST("/recipes/resolve", handlers.ResolveRecipe)
+
+		// Group for endpoints that require authentication.
+		secured := v1.Group("")
+		secured.Use(middleware.AuthMiddleware())
+		{
+			// Regular endpoint: current user's profile.
+			secured.GET("/users/me", handlers.GetCurrentUser)
+
+			// Endpoint for updating current user's information.
+			secured.PUT("/users/me", handlers.UpdateCurrentUser)
+
+			// Endpoint for deactivating (soft deleting) current user.
+			secured.DELETE("/users/me", handlers.DeleteCurrentUser)
+
+			// Admin-only endpoint: list users (or search/filter users).
+			secured.GET("/admin/users", handlers.GetAllUsers)
+		}
 	}
 
 	return router
