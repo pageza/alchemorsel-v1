@@ -3,12 +3,15 @@ package integration
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/joho/godotenv"
 	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/models"
@@ -287,6 +290,193 @@ func TestUserEndpoints(t *testing.T) {
 		router.ServeHTTP(resp, req)
 		if resp.Code != http.StatusBadRequest {
 			t.Errorf("expected status %d for missing login fields, got %d", http.StatusBadRequest, resp.Code)
+		}
+	})
+
+	// ----------------------------------
+	// Test CreateUser endpoint with an invalid email format.
+	// ----------------------------------
+	t.Run("CreateUser_InvalidEmail", func(t *testing.T) {
+		// Payload with improperly formatted email.
+		newUser := map[string]string{
+			"ID":       "test-user-invalid-email",
+			"Name":     "Invalid Email",
+			"Email":    "not-an-email", // invalid format
+			"Password": "password",
+		}
+		payload, err := json.Marshal(newUser)
+		if err != nil {
+			t.Fatalf("failed to marshal payload: %v", err)
+		}
+
+		req, err := http.NewRequest("POST", "/v1/users", bytes.NewBuffer(payload))
+		if err != nil {
+			t.Fatalf("failed to create request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusBadRequest {
+			t.Errorf("expected status %d for invalid email format, got %d", http.StatusBadRequest, resp.Code)
+		}
+	})
+
+	// ----------------------------------
+	// Test that the JWT token returned in LoginUser_Success is valid and has expected claims.
+	// ----------------------------------
+	t.Run("LoginUser_JWTTokenVerification", func(t *testing.T) {
+		loginPayload := map[string]string{
+			"email":    "testuser@example.com",
+			"password": "password",
+		}
+		payload, err := json.Marshal(loginPayload)
+		if err != nil {
+			t.Fatalf("failed to marshal login payload: %v", err)
+		}
+
+		req, err := http.NewRequest("POST", "/v1/users/login", bytes.NewBuffer(payload))
+		if err != nil {
+			t.Fatalf("failed to create login request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected status %d for login, got %d", http.StatusOK, resp.Code)
+		}
+
+		var responseBody map[string]string
+		if err := json.Unmarshal(resp.Body.Bytes(), &responseBody); err != nil {
+			t.Fatalf("failed to unmarshal response: %v", err)
+		}
+		tokenString, exists := responseBody["token"]
+		if !exists || tokenString == "" {
+			t.Fatal("expected a non-empty token in the response")
+		}
+
+		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+			// Ensure the signing method is HMAC.
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return []byte(os.Getenv("JWT_SECRET")), nil
+		})
+		if err != nil {
+			t.Errorf("failed to parse token: %v", err)
+		}
+		if !token.Valid {
+			t.Error("token is invalid")
+		}
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			t.Error("failed to cast token claims")
+		}
+		if claims["user_id"] == nil || claims["email"] == nil {
+			t.Error("expected claims 'user_id' and 'email' in token")
+		}
+	})
+
+	// ----------------------------------
+	// Test concurrent duplicate registration requests.
+	// ----------------------------------
+	t.Run("CreateUser_ConcurrentDuplicate", func(t *testing.T) {
+		newUser := models.User{
+			ID:       "test-user-concurrent",
+			Name:     "Concurrent User",
+			Email:    "testconcurrent@example.com",
+			Password: "password",
+		}
+		payload, err := json.Marshal(newUser)
+		if err != nil {
+			t.Fatalf("failed to marshal payload: %v", err)
+		}
+
+		numRoutines := 5
+		var wg sync.WaitGroup
+		resultCh := make(chan int, numRoutines)
+
+		wg.Add(numRoutines)
+		for i := 0; i < numRoutines; i++ {
+			go func() {
+				defer wg.Done()
+				req, err := http.NewRequest("POST", "/v1/users", bytes.NewBuffer(payload))
+				if err != nil {
+					resultCh <- 0
+					return
+				}
+				req.Header.Set("Content-Type", "application/json")
+				resp := httptest.NewRecorder()
+				router.ServeHTTP(resp, req)
+				resultCh <- resp.Code
+			}()
+		}
+		wg.Wait()
+		close(resultCh)
+
+		createdCount, conflictCount := 0, 0
+		for code := range resultCh {
+			if code == http.StatusCreated {
+				createdCount++
+			} else if code == http.StatusConflict {
+				conflictCount++
+			}
+		}
+
+		if createdCount != 1 {
+			t.Errorf("expected exactly one creation, got %d", createdCount)
+		}
+		if conflictCount != numRoutines-1 {
+			t.Errorf("expected %d conflict responses, got %d", numRoutines-1, conflictCount)
+		}
+	})
+
+	// ----------------------------------
+	// Test login when JWT_SECRET is not set.
+	// ----------------------------------
+	t.Run("LoginUser_NoJWTSecret", func(t *testing.T) {
+		originalSecret := os.Getenv("JWT_SECRET")
+		os.Setenv("JWT_SECRET", "")
+		defer os.Setenv("JWT_SECRET", originalSecret)
+
+		loginPayload := map[string]string{
+			"email":    "testuser@example.com",
+			"password": "password",
+		}
+		payload, err := json.Marshal(loginPayload)
+		if err != nil {
+			t.Fatalf("failed to marshal login payload: %v", err)
+		}
+
+		req, err := http.NewRequest("POST", "/v1/users/login", bytes.NewBuffer(payload))
+		if err != nil {
+			t.Fatalf("failed to create login request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		// Expect an internal server error because the JWT secret is missing.
+		if resp.Code != http.StatusInternalServerError {
+			t.Errorf("expected status %d when JWT secret is missing, got %d", http.StatusInternalServerError, resp.Code)
+		}
+	})
+
+	// ----------------------------------
+	// Test GetUser endpoint for a non-existent user.
+	// ----------------------------------
+	t.Run("GetUser_NotFound", func(t *testing.T) {
+		req, err := http.NewRequest("GET", "/v1/users/nonexistent-id", nil)
+		if err != nil {
+			t.Fatalf("failed to create GET request: %v", err)
+		}
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusNotFound {
+			t.Errorf("expected status %d for non-existent user, got %d", http.StatusNotFound, resp.Code)
 		}
 	})
 }
