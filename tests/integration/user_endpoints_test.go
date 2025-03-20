@@ -49,6 +49,12 @@ func TestMain(m *testing.M) {
 	if err := db.Init(); err != nil {
 		os.Exit(1)
 	}
+	// cursor--UPDATE: When using SQLite, auto-migrate the user table so it exists.
+	if os.Getenv("DB_DRIVER") == "sqlite" {
+		if err := db.DB.AutoMigrate(&models.User{}); err != nil {
+			os.Exit(1)
+		}
+	}
 	os.Exit(m.Run())
 }
 
