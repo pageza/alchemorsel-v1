@@ -244,3 +244,22 @@ func PatchCurrentUser(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"user": user})
 }
+
+// VerifyEmail handles GET /v1/users/verify-email/:token
+func VerifyEmail(c *gin.Context) {
+	token := c.Param("token")
+	user, err := services.GetUserByEmailVerificationToken(token)
+	if err != nil || user == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired token"})
+		return
+	}
+
+	user.EmailVerified = true
+	user.EmailVerificationToken = "" // Clear the token after verification
+	if err := services.UpdateUser(user.ID, user); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify email"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "email verified successfully"})
+}

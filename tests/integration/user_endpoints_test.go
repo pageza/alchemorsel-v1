@@ -16,6 +16,7 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
+	"github.com/pageza/alchemorsel-v1/internal/services"
 )
 
 // TestMain ensures the database connection is initialized before tests run.
@@ -677,4 +678,29 @@ func TestAdditionalUserEndpoints(t *testing.T) {
 			t.Errorf("Expected at least one request to be rate limited, but none were")
 		}
 	})
+}
+
+// TestEmailVerification tests the email verification process.
+func TestEmailVerification(t *testing.T) {
+	// Setup router from application routes.
+	router := routes.SetupRouter()
+
+	// Create a user and get the verification token.
+	user := &models.User{
+		Name:     "Test User",
+		Email:    "testuser@example.com",
+		Password: "password",
+	}
+	if err := services.CreateUser(user); err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// Simulate email verification.
+	req, _ := http.NewRequest("GET", fmt.Sprintf("/v1/users/verify-email/%s", user.EmailVerificationToken), nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
 }

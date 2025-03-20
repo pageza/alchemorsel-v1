@@ -20,6 +20,7 @@ func SetupRouter() *gin.Engine {
 		// Public user endpoints for registration and login.
 		v1.POST("/users", handlers.CreateUser)
 		v1.POST("/users/login", middleware.LoginRateLimiter(), handlers.LoginUser)
+		v1.GET("/users/verify-email/:token", handlers.VerifyEmail)
 		// (Optional) In the future, we might add public endpoints for user lookup with proper measures.
 
 		// Recipe endpoints

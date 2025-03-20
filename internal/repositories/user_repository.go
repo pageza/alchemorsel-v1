@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"time"
+
 	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"gorm.io/gorm"
@@ -36,8 +38,8 @@ func DeleteUser(id string) error {
 
 // DeactivateUser performs a soft deletion by marking the user as inactive.
 func DeactivateUser(id string) error {
-	// Delete uses GORM's soft delete if the model has a DeletedAt field.
-	return db.DB.Delete(&models.User{}, "id = ?", id).Error
+	// Soft delete the user by marking them as inactive.
+	return db.DB.Model(&models.User{}).Where("id = ?", id).Update("deleted_at", time.Now()).Error
 }
 
 // GetUserByEmail retrieves a user by email from the database.
@@ -56,4 +58,16 @@ func GetAllUsers() ([]*models.User, error) {
 		return nil, err
 	}
 	return users, nil
+}
+
+// GetUserByEmailVerificationToken retrieves a user with a matching email verification token.
+func GetUserByEmailVerificationToken(token string) (*models.User, error) {
+	var user models.User
+	if err := db.DB.Where("email_verification_token = ?", token).First(&user).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
 }

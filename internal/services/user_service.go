@@ -39,6 +39,11 @@ func CreateUser(user *models.User) error {
 	}
 	user.Password = string(hashedPassword)
 
+	// Generate email verification token and expiration
+	user.EmailVerificationToken = uuid.NewString()
+	expiration := time.Now().Add(24 * time.Hour) // Token valid for 24 hours
+	user.EmailVerificationExpires = &expiration
+
 	// Call the repository layer to persist the user.
 	return repositories.CreateUser(user)
 }
@@ -83,8 +88,8 @@ func UpdateUser(id string, user *models.User) error {
 
 // DeleteUser deletes a user by ID.
 func DeleteUser(id string) error {
-	// TODO: Implement logic to delete a user.
-	return stdErrors.New("not implemented")
+	// Soft delete the user by marking them as inactive.
+	return repositories.DeactivateUser(id)
 }
 
 // LoginUser authenticates a user and returns a JWT token.
@@ -163,4 +168,20 @@ func PatchUser(id string, patchData map[string]interface{}) error {
 
 	// Reuse the existing UpdateUser function to persist changes.
 	return UpdateUser(id, user)
+}
+
+// GetUserByEmailVerificationToken retrieves a user by token and checks expiration.
+func GetUserByEmailVerificationToken(token string) (*models.User, error) {
+	user, err := repositories.GetUserByEmailVerificationToken(token)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, nil
+	}
+	// Optional: Check if the token has expired.
+	if user.EmailVerificationExpires != nil && user.EmailVerificationExpires.Before(time.Now()) {
+		return nil, nil
+	}
+	return user, nil
 }
