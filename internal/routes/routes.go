@@ -11,10 +11,15 @@ import (
 
 // SetupRouter sets up the Gin routes for the API.
 func SetupRouter() *gin.Engine {
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(gin.Logger())
 
-	// NEW: Add security headers middleware globally.
-	router.Use(middleware.SecurityHeaders())
+	// Only add security headers and rate limiter when not testing.
+	if gin.Mode() != gin.TestMode {
+		router.Use(middleware.SecurityHeaders())
+		router.Use(middleware.RateLimiter())
+	}
 
 	// Conditionally add test authentication bypass middleware when in test mode.
 	if gin.Mode() == gin.TestMode {

@@ -61,7 +61,7 @@ func TestMain(m *testing.M) {
 func TestUserEndpoints(t *testing.T) {
 	// Set up in-memory SQLite database for integration tests.
 	os.Setenv("DB_DRIVER", "sqlite")
-	os.Setenv("DB_SOURCE", ":memory:")
+	os.Setenv("DB_SOURCE", "file::memory:?cache=shared")
 
 	// Set Gin to test mode.
 	gin.SetMode(gin.TestMode)

@@ -34,3 +34,13 @@ func ForgotPasswordRateLimiter() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// cursor--ADD: Create stub for rate limiter middleware.
+// RateLimiter is a stub middleware for rate limiting.
+// In production, replace this with a fully featured rate limiter.
+func RateLimiter() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// No rate limiting logic is applied; simply proceed.
+		c.Next()
+	}
+}
