@@ -50,6 +50,20 @@ jobs:
       - name: Start Postgres container for CI tests
         run: docker run -d --name postgres --network ci_network -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=ci_password -e POSTGRES_DB=ci_recipesdb -p 5432:5432 ankane/pgvector
 
+      - name: Wait for Postgres to be ready
+        run: |
+          echo "Waiting for Postgres to be ready on port 5432..."
+          for i in {1..10}; do
+            if nc -z localhost 5432; then
+              echo "Postgres is ready!"
+              exit 0
+            fi
+            echo "Waiting... ($i/10)"
+            sleep 5
+          done
+          echo "Postgres did not become ready in time."
+          exit 1
+
       - name: Run Docker container for E2E tests
         run: docker run -d --env-file .env.ci --network ci_network -p 8080:8080 --name recipeservice recipeservice
 
