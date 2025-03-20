@@ -27,14 +27,22 @@ func TestMain(m *testing.M) {
 		// If .env.test is not found, relying on environment variables.
 	}
 
-	// Ensure required DB environment variables are set; otherwise, skip tests.
-	if os.Getenv("POSTGRES_HOST") == "" ||
-		os.Getenv("POSTGRES_PORT") == "" ||
-		os.Getenv("POSTGRES_USER") == "" ||
-		os.Getenv("POSTGRES_PASSWORD") == "" ||
-		os.Getenv("POSTGRES_DB") == "" {
-		// Skip tests if the DB is not configured.
-		os.Exit(0)
+	// cursor--MOD: Default to sqlite if DB_DRIVER is not already set.
+	if os.Getenv("DB_DRIVER") == "" {
+		os.Setenv("DB_DRIVER", "sqlite")
+		os.Setenv("DB_SOURCE", ":memory:")
+	}
+
+	// If not using sqlite, ensure required Postgres environment variables are set; otherwise, skip tests.
+	if os.Getenv("DB_DRIVER") != "sqlite" {
+		if os.Getenv("POSTGRES_HOST") == "" ||
+			os.Getenv("POSTGRES_PORT") == "" ||
+			os.Getenv("POSTGRES_USER") == "" ||
+			os.Getenv("POSTGRES_PASSWORD") == "" ||
+			os.Getenv("POSTGRES_DB") == "" {
+			// Skip tests if the DB is not configured.
+			os.Exit(0)
+		}
 	}
 
 	// Initialize the database connection using environment variables.
