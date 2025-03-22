@@ -10,6 +10,7 @@ import (
 
 	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/models"
+	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/services"
 )
 
@@ -24,6 +25,11 @@ func TestMain(m *testing.M) {
 
 	// AutoMigrate creates the required schema for the User model.
 	if err := db.DB.AutoMigrate(&models.User{}); err != nil {
+		os.Exit(1)
+	}
+
+	// Initialize the repositories DB so repository functions use the same connection.
+	if err := repositories.InitializeDB("file::memory:?cache=shared"); err != nil {
 		os.Exit(1)
 	}
 
