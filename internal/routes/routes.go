@@ -102,30 +102,29 @@ func SetupRouter() *gin.Engine {
 		v1.GET("/health", handlers.HealthCheck)
 	}
 
-	// In test/integration mode, initialize the DB, run migrations, then clear users.
+	// Always initialize the database connection.
+	dsn := os.Getenv("DB_SOURCE")
+	if dsn == "" {
+		logrus.Fatal("DB_SOURCE environment variable not set")
+	}
+	if err := repositories.InitializeDB(dsn); err != nil {
+		logrus.WithError(err).Fatal("failed to initialize database")
+	}
+	if err := repositories.AutoMigrate(); err != nil {
+		logrus.WithError(err).Fatal("failed to migrate database")
+	}
+
+	// For test or integration environments, clear users and insert a dummy user.
 	if gin.Mode() == gin.TestMode || os.Getenv("INTEGRATION_TEST") == "true" {
-		dsn := os.Getenv("DB_SOURCE")
-		if dsn == "" {
-			logrus.Fatal("DB_SOURCE environment variable not set")
-		}
-		// Initialize the database connection.
-		if err := repositories.InitializeDB(dsn); err != nil {
-			logrus.WithError(err).Fatal("failed to initialize database")
-		}
-		if err := repositories.AutoMigrate(); err != nil {
-			logrus.WithError(err).Fatal("failed to migrate database")
-		}
 		if err := repositories.ClearUsers(); err != nil {
 			logrus.WithError(err).Fatal("failed to clear users table")
 		}
-		// Insert a dummy user with ID "1" for the health check endpoint.
 		dummyUser := models.User{
 			ID:       "1",
 			Name:     "Dummy User",
 			Email:    "dummy@example.com",
-			Password: "dummy", // Replace with appropriate hashed password if needed.
+			Password: "dummy", // Replace with a hashed password in production if needed.
 		}
-		// Use FirstOrCreate so that if the dummy user already exists it won't trigger a UNIQUE constraint error.
 		if err := repositories.DB.FirstOrCreate(&dummyUser, models.User{ID: "1"}).Error; err != nil {
 			logrus.WithError(err).Fatal("failed to create dummy user")
 		}
