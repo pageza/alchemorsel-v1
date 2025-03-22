@@ -14,7 +14,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
@@ -51,10 +50,6 @@ func TestMain(m *testing.M) {
 			os.Exit(0)
 		}
 	}
-	// Initialize the database connection for integration tests.
-	if err := db.Init(); err != nil {
-		os.Exit(1)
-	}
 	os.Exit(m.Run())
 }
 
@@ -84,9 +79,7 @@ func generateRandomSuffix() string {
 }
 
 func TestUserEndpoints(t *testing.T) {
-	// Set up SQLite configuration for integration tests.
-	os.Setenv("DB_DRIVER", "sqlite")
-	os.Setenv("DB_SOURCE", "file::memory:?cache=shared")
+	// Rely on the DSN set in TestMain (persistent file: "./test.db") for integration tests.
 	// Force tests to disable the rate limiter.
 	os.Setenv("DISABLE_RATE_LIMITER", "true")
 	// Set Gin to test mode.
