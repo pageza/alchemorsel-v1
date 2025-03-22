@@ -16,6 +16,11 @@ var DB *gorm.DB
 // InitializeDB initializes the database connection.
 // For in-memory SQLite, forcing only one open connection ensures the DB persists.
 func InitializeDB(dsn string) error {
+	// If the DB is already initialized, return immediately.
+	if DB != nil {
+		return nil
+	}
+
 	driver := os.Getenv("DB_DRIVER")
 	var err error
 	if driver == "" || driver == "sqlite" {
