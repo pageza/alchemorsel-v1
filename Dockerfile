@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.19 AS builder
+FROM golang:1.24 AS builder
 ENV CGO_ENABLED=1
 RUN apt-get update && apt-get install -y libsqlite3-dev
 WORKDIR /app
