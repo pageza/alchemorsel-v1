@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
+	"github.com/pageza/alchemorsel-v1/internal/services"
 )
 
 func LoginUser(c *gin.Context) {
@@ -18,9 +19,12 @@ func LoginUser(c *gin.Context) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if strings.TrimSpace(input.Email) == "" || strings.TrimSpace(input.Password) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "email and password are required"})
 		return
 	}
 
@@ -131,26 +135,29 @@ func PatchCurrentUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"user": user})
 }
 
-// CreateUser creates a new user.
-// Now made idempotent: if a duplicate email is detected, the existing user is returned.
+// CreateUser creates a new user and handles duplicate registration.
 func CreateUser(c *gin.Context) {
-	var newUser models.User
-	if err := c.ShouldBindJSON(&newUser); err != nil {
+	var user models.User
+	if err := c.ShouldBindJSON(&user); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	// Always attempt to create a new user.
-	// If a duplicate email is provided the DB will error out,
-	// which we map to an HTTP 400 with a friendly message.
-	if err := repositories.CreateUser(c.Request.Context(), &newUser); err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "email already in use"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// Validate required fields.
+	if strings.TrimSpace(user.Name) == "" || strings.TrimSpace(user.Email) == "" || strings.TrimSpace(user.Password) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name, email, and password are required"})
 		return
 	}
-	c.JSON(http.StatusCreated, newUser)
+	err := services.CreateUser(c.Request.Context(), &user)
+	if err != nil {
+		// Check for duplicate registration using a UNIQUE constraint error.
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			c.JSON(http.StatusConflict, gin.H{"error": "user already exists"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, user)
 }
 
 // NEW: VerifyEmail handles email verification via a token.

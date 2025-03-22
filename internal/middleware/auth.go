@@ -13,40 +13,32 @@ import (
 // Bypass occurs only if DISABLE_AUTH is explicitly set.
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if os.Getenv("DISABLE_AUTH") == "true" {
+		// Bypass token validation if the test bypass middleware has already set the user.
+		if _, exists := c.Get("currentUser"); exists {
 			c.Next()
 			return
 		}
-		// Expect an Authorization header.
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			c.Abort()
 			return
 		}
-		// Expecting the header to be: "Bearer <token>"
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		secret := os.Getenv("JWT_SECRET")
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			return []byte(os.Getenv("JWT_SECRET")), nil
+			return []byte(secret), nil
 		})
 		if err != nil || !token.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			c.Abort()
 			return
 		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
-			return
+		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+			if id, ok := claims["id"].(string); ok {
+				c.Set("currentUser", id)
+			}
 		}
-
-		userID, ok := claims["id"].(string)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Token missing user id"})
-			return
-		}
-
-		// Store the userID in the context for later use.
-		c.Set("currentUser", userID)
 		c.Next()
 	}
 }
