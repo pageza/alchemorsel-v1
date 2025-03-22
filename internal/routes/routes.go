@@ -47,9 +47,6 @@ func SetupRouter() *gin.Engine {
 							c.Set("currentUser", id)
 						}
 					}
-				} else {
-					// Fallback: if token parsing fails, set the raw token.
-					c.Set("currentUser", rawToken)
 				}
 			}
 			c.Next()
