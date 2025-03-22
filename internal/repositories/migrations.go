@@ -1,9 +1,11 @@
 package repositories
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/pageza/alchemorsel-v1/internal/models"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -14,21 +16,28 @@ var DB *gorm.DB
 // InitializeDB initializes the database connection.
 // For in-memory SQLite, forcing only one open connection ensures the DB persists.
 func InitializeDB(dsn string) error {
-	// If using the in-memory DSN, select an appropriate DSN.
-	if dsn == "file::memory:?cache=shared" {
-		if os.Getenv("INTEGRATION_TEST") == "true" {
-			// Use a file-based DB for integration tests to ensure persistence across connections.
-			dsn = "./test.db"
-		} else {
-			// Use shared in-memory if not in integration test mode.
-			dsn = "file:memdb1?mode=memory&cache=shared"
-		}
-	}
-
+	driver := os.Getenv("DB_DRIVER")
 	var err error
-	DB, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	if err != nil {
-		return err
+	if driver == "" || driver == "sqlite" {
+		// Adjust DSN for in‑memory SQLite if needed.
+		if dsn == "file::memory:?cache=shared" {
+			if os.Getenv("INTEGRATION_TEST") == "true" {
+				dsn = "./test.db"
+			} else {
+				dsn = "file:memdb1?mode=memory&cache=shared"
+			}
+		}
+		DB, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+		if err != nil {
+			return err
+		}
+	} else if driver == "postgres" {
+		DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("unsupported DB_DRIVER: %s", driver)
 	}
 	sqlDB, err := DB.DB()
 	if err != nil {
