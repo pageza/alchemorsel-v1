@@ -35,10 +35,10 @@ func TestMain(m *testing.M) {
 	if os.Getenv("JWT_SECRET") == "" {
 		os.Setenv("JWT_SECRET", "testsecret")
 	}
-	// cursor--MOD: Default to sqlite and set DB_SOURCE to shared in‑memory so that migration picks a persistent DSN.
+	// cursor--MOD: Default to sqlite and set DB_SOURCE to a persistent file so that migrations run on a single connection.
 	if os.Getenv("DB_DRIVER") == "" {
 		os.Setenv("DB_DRIVER", "sqlite")
-		os.Setenv("DB_SOURCE", "file::memory:?cache=shared")
+		os.Setenv("DB_SOURCE", "./test.db")
 	}
 	// If not using sqlite, ensure required Postgres environment variables are set; otherwise, skip tests.
 	if os.Getenv("DB_DRIVER") != "sqlite" {

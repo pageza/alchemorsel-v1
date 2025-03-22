@@ -21,7 +21,18 @@ func Init() error {
 		}
 		var err error
 		DB, err = gorm.Open(sqlite.Open(source), &gorm.Config{})
-		return err
+		if err != nil {
+			return err
+		}
+		sqlDB, err := DB.DB()
+		if err != nil {
+			return err
+		}
+		// Limit to a single connection to ensure the persistent file/db is used consistently.
+		sqlDB.SetMaxOpenConns(1)
+		sqlDB.SetMaxIdleConns(1)
+		sqlDB.SetConnMaxLifetime(0)
+		return nil
 	}
 
 	host := os.Getenv("POSTGRES_HOST")
