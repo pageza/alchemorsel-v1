@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -16,8 +17,13 @@ var DB *gorm.DB
 // InitializeDB initializes the database connection.
 // For in-memory SQLite, forcing only one open connection ensures the DB persists.
 func InitializeDB(dsn string) error {
-	// If the DB is already initialized, return immediately.
+	// If the repositories DB is already initialized, return immediately.
 	if DB != nil {
+		return nil
+	}
+	// If the global db connection is already initialized, use it.
+	if db.DB != nil {
+		DB = db.DB
 		return nil
 	}
 
