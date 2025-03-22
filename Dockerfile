@@ -1,5 +1,7 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.19 AS builder
+ENV CGO_ENABLED=1
+RUN apt-get update && apt-get install -y libsqlite3-dev
 WORKDIR /app
 COPY go.mod .
 COPY go.sum .
@@ -9,8 +11,8 @@ COPY migrations migrations
 RUN go build -o main ./cmd/app
 
 # Run stage
-FROM alpine:latest
-WORKDIR /app
+FROM alpine:3.16
+RUN apk add --no-cache sqlite
 COPY --from=builder /app/main .
 COPY --from=builder /app/migrations ./migrations
 EXPOSE 8080
