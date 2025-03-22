@@ -3,6 +3,7 @@ package migrations
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -22,19 +23,23 @@ func RunMigrations() error {
 	// DSN format: "postgres://username:password@host:port/dbname?sslmode=disable"
 	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", user, password, host, port, dbname)
 
-	m, err := migrate.New("file://migrations", dsn)
-	if err != nil {
-		zap.L().Error("failed to create migrate instance", zap.Error(err))
-		return err
-	}
+	var m *migrate.Migrate
+	var err error
 
-	// Run up migrations. ErrNoChange means there's nothing new to apply.
-	err = m.Up()
-	if err != nil && err != migrate.ErrNoChange {
-		zap.L().Error("failed to run migrations", zap.Error(err))
-		return err
+	maxAttempts := 10
+	for i := 1; i <= maxAttempts; i++ {
+		m, err = migrate.New("file://migrations", dsn)
+		if err != nil {
+			zap.L().Error("failed to create migrate instance", zap.Int("attempt", i), zap.Error(err))
+		} else {
+			err = m.Up()
+			if err == nil || err == migrate.ErrNoChange {
+				zap.L().Info("database migrations ran successfully")
+				return nil
+			}
+			zap.L().Error("failed to run migrations", zap.Int("attempt", i), zap.Error(err))
+		}
+		time.Sleep(5 * time.Second)
 	}
-
-	zap.L().Info("database migrations ran successfully")
-	return nil
+	return fmt.Errorf("failed to run migrations after %d attempts: %v", maxAttempts, err)
 }
