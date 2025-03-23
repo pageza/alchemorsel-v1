@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
@@ -21,35 +20,56 @@ import (
 var integrationTestMutex sync.Mutex // Added to serialize tests that modify the DB.
 
 // TestMain ensures the database connection is initialized before tests run.
-func TestMain(m *testing.M) {
-	// Load configuration from .env.test file for testing.
-	if err := godotenv.Load(".env.test"); err != nil {
-		// If .env.test is not found, relying on environment variables.
-	}
-	// Ensure integration test mode so that file‑based DB is used.
-	os.Setenv("INTEGRATION_TEST", "true")
-	// Set a default JWT secret if not already defined.
-	if os.Getenv("JWT_SECRET") == "" {
-		os.Setenv("JWT_SECRET", "testsecret")
-	}
-	// cursor--MOD: Default to sqlite and set DB_SOURCE to a persistent file so that migrations run on a single connection.
-	if os.Getenv("DB_DRIVER") == "" {
-		os.Setenv("DB_DRIVER", "sqlite")
-		os.Setenv("DB_SOURCE", "./test.db")
-	}
-	// If not using sqlite, ensure required Postgres environment variables are set; otherwise, skip tests.
-	if os.Getenv("DB_DRIVER") != "sqlite" {
-		if os.Getenv("POSTGRES_HOST") == "" ||
-			os.Getenv("POSTGRES_PORT") == "" ||
-			os.Getenv("POSTGRES_USER") == "" ||
-			os.Getenv("POSTGRES_PASSWORD") == "" ||
-			os.Getenv("POSTGRES_DB") == "" {
-			// Skip tests if the DB is not configured.
-			os.Exit(0)
-		}
-	}
-	os.Exit(m.Run())
-}
+// func TestMain(m *testing.M) {
+//     ctx := context.Background()
+//
+//     req := testcontainers.ContainerRequest{
+//         Image:        "postgres:13",
+//         ExposedPorts: []string{"5432/tcp"},
+//         Env: map[string]string{
+//             "POSTGRES_USER":     "testuser",
+//             "POSTGRES_PASSWORD": "testpass",
+//             "POSTGRES_DB":       "testdb",
+//         },
+//         WaitingFor: wait.ForListeningPort("5432/tcp").WithStartupTimeout(60 * time.Second),
+//     }
+//
+//     postgresC, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+//         ContainerRequest: req,
+//         Started:          true,
+//     })
+//     if err != nil {
+//         fmt.Printf("Failed to start PostgreSQL container: %v\n", err)
+//         os.Exit(1)
+//     }
+//     defer func() {
+//         _ = postgresC.Terminate(ctx)
+//     }()
+//
+//     host, err := postgresC.Host(ctx)
+//     if err != nil {
+//         fmt.Printf("Failed to get container host: %v\n", err)
+//         os.Exit(1)
+//     }
+//     mappedPort, err := postgresC.MappedPort(ctx, "5432")
+//     if err != nil {
+//         fmt.Printf("Failed to get mapped port: %v\n", err)
+//         os.Exit(1)
+//     }
+//
+//     os.Setenv("DB_DRIVER", "postgres")
+//     dsn := fmt.Sprintf("host=%s port=%s user=testuser password=testpass dbname=testdb sslmode=disable", host, mappedPort.Port())
+//     os.Setenv("DB_SOURCE", dsn)
+//
+//     os.Setenv("POSTGRES_HOST", host)
+//     os.Setenv("POSTGRES_PORT", mappedPort.Port())
+//     os.Setenv("POSTGRES_USER", "testuser")
+//     os.Setenv("POSTGRES_PASSWORD", "testpass")
+//     os.Setenv("POSTGRES_DB", "testdb")
+//
+//     code := m.Run()
+//     os.Exit(code)
+// }
 
 // resetDB resets the database state before each subtest.
 func resetDB(t *testing.T) {
