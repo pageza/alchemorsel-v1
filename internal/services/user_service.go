@@ -15,61 +15,31 @@ import (
 	stdErrors "errors"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/google/uuid"
 	appErrors "github.com/pageza/alchemorsel-v1/internal/errors"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// CreateUser creates a new user.
+// CreateUser registers a new user.
+// It checks for duplicates, hashes the password, and returns an error if any issue occurs.
 func CreateUser(ctx context.Context, user *models.User) error {
-	// Instead of always overriding, only generate a new ID if none is provided.
-	if user.ID == "" {
-		user.ID = uuid.NewString()
-	}
-
-	if user.Password == "" {
-		return stdErrors.New("password required")
-	}
-
-	// Sanitize input: trim spaces and lowercase the email.
-	user.Email = strings.ToLower(strings.TrimSpace(user.Email))
-	user.Name = strings.TrimSpace(user.Name)
-
-	// Validate password strength.
-	if err := utils.ValidatePassword(user.Password); err != nil {
-		return fmt.Errorf("password validation failed: %w", err)
-	}
-
-	// Configurable bcrypt cost.
-	cost := bcrypt.DefaultCost
-	if costStr := os.Getenv("BCRYPT_COST"); costStr != "" {
-		if parsedCost, err := strconv.Atoi(costStr); err == nil {
-			cost = parsedCost
-		}
-	}
-
-	// Hash the user's password using bcrypt.
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), cost)
+	// Check if a user with the given email already exists.
+	existingUser, err := repositories.GetUserByEmail(ctx, user.Email)
 	if err != nil {
-		zap.L().Error("failed to hash password", zap.Error(err))
-		return fmt.Errorf("failed to hash password: %w", err)
+		return err
+	}
+	if existingUser != nil {
+		return fmt.Errorf("UNIQUE constraint failed: users.email")
+	}
+
+	// Hash the user's password.
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
 	}
 	user.Password = string(hashedPassword)
 
-	// Generate email verification token using secure token generation.
-	token, err := utils.GenerateSecureToken(16)
-	if err != nil {
-		zap.L().Error("failed to generate secure token", zap.Error(err))
-		return fmt.Errorf("failed to generate secure token: %w", err)
-	}
-	user.EmailVerificationToken = token
-	expiration := time.Now().Add(24 * time.Hour)
-	user.EmailVerificationExpires = &expiration
-
-	// Audit log for user creation.
-	zap.L().Info("Creating new user", zap.String("email", user.Email))
-
+	// Create the user in the database.
 	return repositories.CreateUser(ctx, user)
 }
 
@@ -117,7 +87,8 @@ func DeleteUser(ctx context.Context, id string) error {
 	return repositories.DeactivateUser(ctx, id)
 }
 
-// LoginUser authenticates a user and returns a signed JWT token.
+// LoginUser authenticates a user using email and password.
+// If authentication succeeds, it returns a signed JWT token.
 func LoginUser(ctx context.Context, req *models.LoginRequest) (string, error) {
 	// Lookup the user by email.
 	user, err := repositories.GetUserByEmail(ctx, req.Email)
@@ -127,23 +98,24 @@ func LoginUser(ctx context.Context, req *models.LoginRequest) (string, error) {
 	if user == nil {
 		return "", fmt.Errorf("invalid credentials")
 	}
+
 	// Validate the password.
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		return "", fmt.Errorf("invalid credentials")
 	}
+
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		return "", fmt.Errorf("JWT secret is not set")
 	}
-	claims := jwt.MapClaims{
-		"user_id": user.ID,
-		"email":   user.Email,
-		"exp":     time.Now().Add(24 * time.Hour).Unix(),
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	// Build a JWT token with the user's ID and an expiration.
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"id":  user.ID,
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
 	tokenString, err := token.SignedString([]byte(secret))
 	if err != nil {
-		zap.L().Error("failed to sign JWT token", zap.Error(err))
 		return "", err
 	}
 	return tokenString, nil
