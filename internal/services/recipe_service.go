@@ -18,9 +18,9 @@ func GetRecipe(id string) (*models.Recipe, error) {
 	return nil, errors.New("not implemented")
 }
 
-// CreateRecipe creates a new recipe.
-func CreateRecipe(recipe *models.Recipe) error {
-	// TODO: Implement logic to create a recipe.
+// SaveRecipe saves a new recipe into the database.
+func SaveRecipe(recipe *models.Recipe) error {
+	// TODO: Implement logic to save the accepted recipe (persist it in the database).
 	return errors.New("not implemented")
 }
 

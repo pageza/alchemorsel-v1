@@ -70,7 +70,7 @@ func SetupRouter() *gin.Engine {
 		// Recipe endpoints
 		v1.GET("/recipes", handlers.ListRecipes)
 		v1.GET("/recipes/:id", handlers.GetRecipe)
-		v1.POST("/recipes", handlers.CreateRecipe)
+		v1.POST("/recipes", handlers.SaveRecipe)
 		v1.PUT("/recipes/:id", handlers.UpdateRecipe)
 		v1.DELETE("/recipes/:id", handlers.DeleteRecipe)
 

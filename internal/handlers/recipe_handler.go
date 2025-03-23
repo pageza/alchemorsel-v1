@@ -18,10 +18,10 @@ func GetRecipe(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "GetRecipe endpoint - TODO: implement logic"})
 }
 
-// CreateRecipe handles POST /v1/recipes
-func CreateRecipe(c *gin.Context) {
-	// TODO: Parse request and create a new recipe.
-	c.JSON(http.StatusCreated, gin.H{"message": "CreateRecipe endpoint - TODO: implement logic"})
+// SaveRecipe handles POST /v1/recipes
+func SaveRecipe(c *gin.Context) {
+	// TODO: Parse request and save the accepted recipe.
+	c.JSON(http.StatusCreated, gin.H{"message": "SaveRecipe endpoint - TODO: implement logic"})
 }
 
 // UpdateRecipe handles PUT /v1/recipes/:id
