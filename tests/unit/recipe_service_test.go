@@ -1,41 +1,60 @@
 package unit
 
 import (
-	"encoding/json"
+	"errors"
 	"testing"
 
+	"bou.ke/monkey"
 	"github.com/pageza/alchemorsel-v1/internal/models"
+	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/services"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestListRecipes(t *testing.T) {
-	recipes, err := services.ListRecipes()
-	if err == nil {
-		t.Error("Expected error for unimplemented ListRecipes, got nil")
+// func TestListRecipes(t *testing.T) {
+// 	recipes, err := services.ListRecipes()
+// 	if err == nil {
+// 		t.Error("Expected error for unimplemented ListRecipes, got nil")
+// 	}
+// 	if recipes != nil {
+// 		t.Error("Expected nil recipes for unimplemented ListRecipes")
+// 	}
+// }
+
+func TestSaveRecipeSuccess(t *testing.T) {
+	// Monkey-patch repositories.SaveRecipe to simulate a successful database save.
+	patch := monkey.Patch(repositories.SaveRecipe, func(recipe *models.Recipe) error {
+		return nil
+	})
+	defer patch.Unpatch()
+
+	// Create a new recipe with minimal fields.
+	recipe := &models.Recipe{
+		Title: "Test Recipe",
 	}
-	if recipes != nil {
-		t.Error("Expected nil recipes for unimplemented ListRecipes")
-	}
+
+	// Call the service SaveRecipe (this will set CreatedAt and UpdatedAt).
+	err := services.SaveRecipe(recipe)
+	assert.Nil(t, err, "Expected no error on saving recipe")
+	assert.False(t, recipe.CreatedAt.IsZero(), "CreatedAt should be set")
+	assert.False(t, recipe.UpdatedAt.IsZero(), "UpdatedAt should be set")
+	assert.True(t, recipe.UpdatedAt.Equal(recipe.CreatedAt) || recipe.UpdatedAt.After(recipe.CreatedAt),
+		"UpdatedAt should be equal to or after CreatedAt")
 }
 
-func TestCreateRecipe(t *testing.T) {
-	ingredients, err := json.Marshal([]string{"ingredient1", "ingredient2"})
-	if err != nil {
-		t.Fatalf("Error marshalling ingredients: %v", err)
-	}
-	steps, err := json.Marshal([]string{"step1", "step2"})
-	if err != nil {
-		t.Fatalf("Error marshalling steps: %v", err)
-	}
+func TestSaveRecipeFailure(t *testing.T) {
+	// Simulate a failure in the repository call.
+	expectedErr := errors.New("db error")
+	patch := monkey.Patch(repositories.SaveRecipe, func(recipe *models.Recipe) error {
+		return expectedErr
+	})
+	defer patch.Unpatch()
 
 	recipe := &models.Recipe{
-		ID:          "1",
-		Title:       "Test Recipe",
-		Ingredients: ingredients,
-		Steps:       steps,
+		Title: "Test Recipe",
 	}
-	err = services.CreateRecipe(recipe)
-	if err == nil {
-		t.Error("Expected error for unimplemented CreateRecipe, got nil")
-	}
+
+	err := services.SaveRecipe(recipe)
+	assert.NotNil(t, err, "Expected an error when the repository fails")
+	assert.Equal(t, expectedErr, err, "Error should match the simulated repository error")
 }

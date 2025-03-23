@@ -65,5 +65,16 @@ func InitializeDB(dsn string) error {
 
 // AutoMigrate runs database migrations for our models.
 func AutoMigrate() error {
-	return DB.AutoMigrate(&models.User{})
+	return DB.AutoMigrate(
+		&models.User{},
+		&models.Recipe{},
+		&models.Tag{},
+		&models.Appliance{},
+	)
+}
+
+// ClearUsers removes all data from the users table.
+// This helper is used for test and integration setup.
+func ClearUsers() error {
+	return DB.Exec("DELETE FROM users").Error
 }

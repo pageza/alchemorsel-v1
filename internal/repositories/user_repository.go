@@ -113,8 +113,3 @@ func GetUserByResetPasswordToken(ctx context.Context, token string) (*models.Use
 	}
 	return &user, nil
 }
-
-// ClearUsers removes all users from the database.
-func ClearUsers() error {
-	return DB.Unscoped().Where("1 = 1").Delete(&models.User{}).Error
-}

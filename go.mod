@@ -3,6 +3,7 @@ module github.com/pageza/alchemorsel-v1
 go 1.24
 
 require (
+	bou.ke/monkey v1.0.2
 	github.com/didip/tollbooth v4.0.2+incompatible
 	github.com/gin-gonic/gin v1.10.0
 	github.com/golang-jwt/jwt/v4 v4.5.1
