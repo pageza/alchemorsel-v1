@@ -2,6 +2,7 @@ package integration
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,64 +12,157 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// These integration tests perform complete flows including creation.
+// They now expect production-like responses (e.g. JSON objects with proper resource fields)
+// which will fail until the endpoints are fully implemented.
+
+// TestIntegrationListRecipes creates a recipe and then expects GET /v1/recipes to return a list
 func TestIntegrationListRecipes(t *testing.T) {
 	router := routes.SetupRouter()
+
+	// First, create a recipe
+	postBody := `{"title": "Integration Test Recipe", "ingredients": ["ing1", "ing2"], "steps": ["s1", "s2"]}`
+	createReq, _ := http.NewRequest("POST", "/v1/recipes", strings.NewReader(postBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp := httptest.NewRecorder()
+	router.ServeHTTP(createResp, createReq)
+	assert.Equal(t, http.StatusCreated, createResp.Code)
+
+	// Now, list recipes
 	req, _ := http.NewRequest("GET", "/v1/recipes", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-
 	assert.Equal(t, http.StatusOK, w.Code)
-	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	assert.Equal(t, "ListRecipes endpoint - TODO: implement logic", resp["message"])
+
+	var resp struct {
+		Data []map[string]interface{} `json:"data"`
+	}
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.NoError(t, err)
+	// We expect at least one recipe in the list
+	assert.GreaterOrEqual(t, len(resp.Data), 1)
 }
 
+// TestIntegrationGetRecipe creates a recipe then retrieves it by ID.
 func TestIntegrationGetRecipe(t *testing.T) {
 	router := routes.SetupRouter()
-	req, _ := http.NewRequest("GET", "/v1/recipes/1", nil)
+
+	// Create a recipe
+	postBody := `{"title": "Integration Test Recipe Get", "ingredients": ["ing"], "steps": ["s"]}`
+	createReq, _ := http.NewRequest("POST", "/v1/recipes", strings.NewReader(postBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp := httptest.NewRecorder()
+	router.ServeHTTP(createResp, createReq)
+	assert.Equal(t, http.StatusCreated, createResp.Code)
+
+	var created struct {
+		ID    float64 `json:"id"`
+		Title string  `json:"title"`
+	}
+	err := json.Unmarshal(createResp.Body.Bytes(), &created)
+	assert.NoError(t, err)
+	assert.NotZero(t, created.ID)
+
+	// Retrieve the created recipe
+	getURL := fmt.Sprintf("/v1/recipes/%v", created.ID)
+	req, _ := http.NewRequest("GET", getURL, nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-
 	assert.Equal(t, http.StatusOK, w.Code)
-	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	assert.Equal(t, "GetRecipe endpoint - TODO: implement logic", resp["message"])
+
+	var recipe struct {
+		ID    float64 `json:"id"`
+		Title string  `json:"title"`
+	}
+	err = json.Unmarshal(w.Body.Bytes(), &recipe)
+	assert.NoError(t, err)
+	assert.Equal(t, created.ID, recipe.ID)
+	assert.Equal(t, created.Title, recipe.Title)
 }
 
+// TestIntegrationCreateRecipe expects the POST endpoint to return a created recipe with a valid ID.
 func TestIntegrationCreateRecipe(t *testing.T) {
 	router := routes.SetupRouter()
-	req, _ := http.NewRequest("POST", "/v1/recipes", strings.NewReader("{}"))
+
+	reqBody := `{"title": "Integration Created Recipe", "ingredients": ["ing1"], "steps": ["step1"]}`
+	req, _ := http.NewRequest("POST", "/v1/recipes", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusCreated, w.Code)
-	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	assert.Equal(t, "CreateRecipe endpoint - TODO: implement logic", resp["message"])
+	var recipe struct {
+		ID    float64 `json:"id"`
+		Title string  `json:"title"`
+	}
+	err := json.Unmarshal(w.Body.Bytes(), &recipe)
+	assert.NoError(t, err)
+	assert.NotZero(t, recipe.ID)
+	assert.Equal(t, "Integration Created Recipe", recipe.Title)
 }
 
+// TestIntegrationUpdateRecipe expects the PUT endpoint to update and return the recipe.
 func TestIntegrationUpdateRecipe(t *testing.T) {
 	router := routes.SetupRouter()
-	req, _ := http.NewRequest("PUT", "/v1/recipes/1", strings.NewReader("{}"))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
-	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	assert.Equal(t, "UpdateRecipe endpoint - TODO: implement logic", resp["message"])
+	// First, create a recipe to update
+	postBody := `{"title": "Recipe to Update", "ingredients": ["ing"], "steps": ["s"]}`
+	createReq, _ := http.NewRequest("POST", "/v1/recipes", strings.NewReader(postBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp := httptest.NewRecorder()
+	router.ServeHTTP(createResp, createReq)
+	assert.Equal(t, http.StatusCreated, createResp.Code)
+
+	var created struct {
+		ID    float64 `json:"id"`
+		Title string  `json:"title"`
+	}
+	err := json.Unmarshal(createResp.Body.Bytes(), &created)
+	assert.NoError(t, err)
+
+	// Now update the recipe
+	updateBody := `{"title": "Recipe Updated", "ingredients": ["newing"], "steps": ["newstep"]}`
+	updateURL := fmt.Sprintf("/v1/recipes/%v", created.ID)
+	updateReq, _ := http.NewRequest("PUT", updateURL, strings.NewReader(updateBody))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateResp := httptest.NewRecorder()
+	router.ServeHTTP(updateResp, updateReq)
+	assert.Equal(t, http.StatusOK, updateResp.Code)
+
+	var updated struct {
+		ID    float64 `json:"id"`
+		Title string  `json:"title"`
+	}
+	err = json.Unmarshal(updateResp.Body.Bytes(), &updated)
+	assert.NoError(t, err)
+	assert.Equal(t, "Recipe Updated", updated.Title)
 }
 
+// TestIntegrationDeleteRecipe expects the DELETE endpoint to return status 204 No Content.
 func TestIntegrationDeleteRecipe(t *testing.T) {
 	router := routes.SetupRouter()
-	req, _ := http.NewRequest("DELETE", "/v1/recipes/1", nil)
+
+	// Create a recipe to delete
+	postBody := `{"title": "Recipe to Delete", "ingredients": ["ing"], "steps": ["s"]}`
+	createReq, _ := http.NewRequest("POST", "/v1/recipes", strings.NewReader(postBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp := httptest.NewRecorder()
+	router.ServeHTTP(createResp, createReq)
+	assert.Equal(t, http.StatusCreated, createResp.Code)
+
+	var created struct {
+		ID    float64 `json:"id"`
+		Title string  `json:"title"`
+	}
+	err := json.Unmarshal(createResp.Body.Bytes(), &created)
+	assert.NoError(t, err)
+
+	// Delete the recipe
+	deleteURL := fmt.Sprintf("/v1/recipes/%v", created.ID)
+	req, _ := http.NewRequest("DELETE", deleteURL, nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	assert.Equal(t, "DeleteRecipe endpoint - TODO: implement logic", resp["message"])
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	// Optionally, check that the response body is empty
+	assert.Empty(t, w.Body.Bytes())
 }
