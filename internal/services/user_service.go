@@ -18,6 +18,7 @@ import (
 	appErrors "github.com/pageza/alchemorsel-v1/internal/errors"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 // CreateUser registers a new user.
@@ -26,7 +27,12 @@ func CreateUser(ctx context.Context, user *models.User) error {
 	// Check if a user with the given email already exists.
 	existingUser, err := repositories.GetUserByEmail(ctx, user.Email)
 	if err != nil {
-		return err
+		// If error indicates no record found, treat it as not existing.
+		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+			existingUser = nil
+		} else {
+			return err
+		}
 	}
 	if existingUser != nil {
 		return fmt.Errorf("UNIQUE constraint failed: users.email")
