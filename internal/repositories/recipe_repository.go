@@ -14,10 +14,9 @@ func GetRecipe(id string) (*models.Recipe, error) {
 	return nil, nil
 }
 
-// CreateRecipe inserts a new recipe into the database.
-func CreateRecipe(recipe *models.Recipe) error {
-	// TODO: Implement database operation to create a recipe.
-	return nil
+// SaveRecipe inserts a new recipe into the database.
+func SaveRecipe(recipe *models.Recipe) error {
+	return DB.Create(recipe).Error
 }
 
 // UpdateRecipe modifies an existing recipe in the database.

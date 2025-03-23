@@ -2,8 +2,10 @@ package services
 
 import (
 	"errors"
+	"time"
 
 	"github.com/pageza/alchemorsel-v1/internal/models"
+	"github.com/pageza/alchemorsel-v1/internal/repositories"
 )
 
 // ListRecipes retrieves a list of recipes.
@@ -20,8 +22,13 @@ func GetRecipe(id string) (*models.Recipe, error) {
 
 // SaveRecipe saves a new recipe into the database.
 func SaveRecipe(recipe *models.Recipe) error {
-	// TODO: Implement logic to save the accepted recipe (persist it in the database).
-	return errors.New("not implemented")
+	now := time.Now()
+	if recipe.CreatedAt.IsZero() {
+		recipe.CreatedAt = now
+	}
+	recipe.UpdatedAt = now
+	// Insert recipe into the database via the repository.
+	return repositories.SaveRecipe(recipe)
 }
 
 // UpdateRecipe updates an existing recipe.

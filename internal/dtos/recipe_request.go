@@ -12,6 +12,8 @@ type RecipeRequest struct {
 	// New fields for filtering by cuisines and diets
 	Cuisines []string `json:"cuisines,omitempty"`
 	Diets    []string `json:"diets,omitempty"`
+	// Approved indicates whether the candidate recipe has been approved by the user.
+	Approved bool `json:"approved,omitempty"`
 }
 
 // RecipeResolutionRequest defines the payload for the /resolve endpoint.
