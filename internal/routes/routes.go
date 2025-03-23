@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 // SetupRouter sets up the Gin routes for the API.
@@ -104,19 +104,19 @@ func SetupRouter() *gin.Engine {
 	// Always initialize the database connection.
 	dsn := os.Getenv("DB_SOURCE")
 	if dsn == "" {
-		logrus.Fatal("DB_SOURCE environment variable not set")
+		zap.S().Fatal("DB_SOURCE environment variable not set")
 	}
 	if err := repositories.InitializeDB(dsn); err != nil {
-		logrus.WithError(err).Fatal("failed to initialize database")
+		zap.S().Fatalw("failed to initialize database", "error", err)
 	}
 	if err := repositories.AutoMigrate(); err != nil {
-		logrus.WithError(err).Fatal("failed to migrate database")
+		zap.S().Fatalw("failed to migrate database", "error", err)
 	}
 
 	// For test or integration environments, clear users and insert a dummy user.
 	if gin.Mode() == gin.TestMode || os.Getenv("INTEGRATION_TEST") == "true" {
 		if err := repositories.ClearUsers(); err != nil {
-			logrus.WithError(err).Fatal("failed to clear users table")
+			zap.S().Fatal("failed to clear users table")
 		}
 		dummyUser := models.User{
 			ID:       "1",
@@ -125,7 +125,7 @@ func SetupRouter() *gin.Engine {
 			Password: "dummy", // Replace with a hashed password in production if needed.
 		}
 		if err := repositories.DB.FirstOrCreate(&dummyUser, models.User{ID: "1"}).Error; err != nil {
-			logrus.WithError(err).Fatal("failed to create dummy user")
+			zap.S().Fatal("failed to create dummy user")
 		}
 	}
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
+	"go.uber.org/zap"
 )
 
 // ListRecipes retrieves a list of recipes.
@@ -27,6 +28,11 @@ func SaveRecipe(recipe *models.Recipe) error {
 		recipe.CreatedAt = now
 	}
 	recipe.UpdatedAt = now
+
+	// Log the database save operation for monitoring.
+	zap.S().Infow("Saving recipe to the database", "title", recipe.Title)
+
+	// TODO: Consider adding transaction management and enhanced error monitoring.
 	// Insert recipe into the database via the repository.
 	return repositories.SaveRecipe(recipe)
 }

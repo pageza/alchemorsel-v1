@@ -10,6 +10,7 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/integrations"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/services"
+	"go.uber.org/zap"
 )
 
 // ListRecipes handles GET /v1/recipes
@@ -32,11 +33,23 @@ func SaveRecipe(c *gin.Context) {
 		return
 	}
 
+	// Sanitize input: trim spaces from title, ingredients, and steps.
+	req.Title = strings.TrimSpace(req.Title)
+	for i, ingredient := range req.Ingredients {
+		req.Ingredients[i] = strings.TrimSpace(ingredient)
+	}
+	for i, step := range req.Steps {
+		req.Steps[i] = strings.TrimSpace(step)
+	}
+
 	// Check if the candidate recipe has been approved.
 	if !req.Approved {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Recipe not approved by user"})
 		return
 	}
+
+	// Log that an approved recipe is being processed.
+	zap.S().Infow("User-approved recipe received. Proceeding with save", "title", req.Title)
 
 	// Convert slices to JSON for persistence.
 	ingredientsJSON, err := json.Marshal(req.Ingredients)
