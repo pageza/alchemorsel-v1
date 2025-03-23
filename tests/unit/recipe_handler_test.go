@@ -64,7 +64,7 @@ func TestSaveRecipeHandler(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	// Simulate a proper JSON payload for a new recipe.
 	c.Request = httptest.NewRequest("POST", "/v1/recipes",
-		strings.NewReader(`{"title": "New Recipe", "ingredients": ["ing1","ing2"], "steps": ["step1","step2"]}`))
+		strings.NewReader(`{"title": "New Recipe", "ingredients": ["ing1","ing2"], "steps": ["step1","step2"], "approved": true}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	handlers.SaveRecipe(c) // Intended behavior: returns { "data": [<recipe>, ...] } with status 201
