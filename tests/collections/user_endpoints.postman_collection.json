@@ -53,6 +53,27 @@
           "path": ["v1", "users", "login"]
         }
       },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "if(jsonData.token){",
+              "    pm.environment.set('token', jsonData.token);",
+              "    pm.test('Token extracted', function(){",
+              "         pm.expect(jsonData.token).to.be.a('string');",
+              "    });",
+              "} else {",
+              "    pm.test('Token extraction failed', function(){",
+              "          pm.expect(jsonData.token).to.exist;",
+              "    });",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
       "response": []
     },
     {
@@ -264,7 +285,6 @@
         {
           "listen": "test",
           "script": {
-            "type": "text/javascript",
             "exec": [
               "pm.test(\"Status code is 200\", function () {",
               "    pm.response.to.have.status(200);",
@@ -274,7 +294,8 @@
               "pm.test(\"User name is updated\", function () {",
               "    pm.expect(jsonData.user.name).to.eql(\"Updated Name\");",
               "});"
-            ]
+            ],
+            "type": "text/javascript"
           }
         }
       ],
