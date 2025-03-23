@@ -18,7 +18,6 @@ import (
 	appErrors "github.com/pageza/alchemorsel-v1/internal/errors"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 )
 
 // CreateUser registers a new user.
@@ -27,8 +26,8 @@ func CreateUser(ctx context.Context, user *models.User) error {
 	// Check if a user with the given email already exists.
 	existingUser, err := repositories.GetUserByEmail(ctx, user.Email)
 	if err != nil {
-		// If error indicates no record found, treat it as not existing.
-		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+		// If error message indicates user not found, treat it as not existing.
+		if err.Error() == "user not found" {
 			existingUser = nil
 		} else {
 			return err

@@ -31,7 +31,11 @@ func CreateUser(ctx context.Context, user *models.User) error {
 	// Always generate a new ID to prevent external IDs from causing inconsistencies.
 	user.ID = uuid.NewString()
 	user.Email = normalizeEmail(user.Email)
-	return DB.WithContext(ctx).Create(user).Error
+	// Insert the user record.
+	if err := DB.Create(user).Error; err != nil {
+		return err
+	}
+	return nil
 }
 
 // GetUser retrieves a user by ID from the database.
