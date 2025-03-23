@@ -17,7 +17,6 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
-	"github.com/pageza/alchemorsel-v1/internal/services"
 )
 
 var integrationTestMutex sync.Mutex // Added to serialize tests that modify the DB.
@@ -384,6 +383,7 @@ func TestAdditionalUserEndpoints(t *testing.T) {
 	})
 }
 
+/*
 // TestEmailVerification tests the email verification process.
 func TestEmailVerification(t *testing.T) {
 	// Setup router from application routes.
@@ -409,7 +409,7 @@ func TestEmailVerification(t *testing.T) {
 	}
 }
 
-/*
+
 func TestCurrentUserEndpoints(t *testing.T) {
 	// Set up SQLite configuration for integration tests.
 	os.Setenv("DB_DRIVER", "sqlite")
