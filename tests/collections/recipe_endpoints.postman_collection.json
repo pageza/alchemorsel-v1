@@ -1,0 +1,121 @@
+{
+  "info": {
+    "_postman_id": "2a1e6b7c-1234-4f5d-9abc-def012345678",
+    "name": "Recipe Endpoints Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "E2E tests for the base recipe endpoints (GET, POST, PUT, DELETE)"
+  },
+  "item": [
+    {
+      "name": "List Recipes",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/v1/recipes",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v1",
+            "recipes"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Recipe",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/v1/recipes/1",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v1",
+            "recipes",
+            "1"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create Recipe",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/recipes",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v1",
+            "recipes"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Update Recipe",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/recipes/1",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v1",
+            "recipes",
+            "1"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Delete Recipe",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/v1/recipes/1",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v1",
+            "recipes",
+            "1"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+} 
