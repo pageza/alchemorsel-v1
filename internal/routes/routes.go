@@ -18,6 +18,8 @@ import (
 // SetupRouter sets up the Gin routes for the API.
 func SetupRouter() *gin.Engine {
 	router := gin.New()
+	// Disable trailing slash redirection to prevent 301 redirects on endpoints.
+	router.RedirectTrailingSlash = false
 	router.Use(gin.Recovery())
 	router.Use(gin.Logger())
 
