@@ -1,6 +1,7 @@
 package unit
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/pageza/alchemorsel-v1/internal/models"
@@ -18,13 +19,22 @@ func TestListRecipes(t *testing.T) {
 }
 
 func TestCreateRecipe(t *testing.T) {
+	ingredients, err := json.Marshal([]string{"ingredient1", "ingredient2"})
+	if err != nil {
+		t.Fatalf("Error marshalling ingredients: %v", err)
+	}
+	steps, err := json.Marshal([]string{"step1", "step2"})
+	if err != nil {
+		t.Fatalf("Error marshalling steps: %v", err)
+	}
+
 	recipe := &models.Recipe{
 		ID:          "1",
 		Title:       "Test Recipe",
-		Ingredients: []string{"ingredient1", "ingredient2"},
-		Steps:       []string{"step1", "step2"},
+		Ingredients: ingredients,
+		Steps:       steps,
 	}
-	err := services.CreateRecipe(recipe)
+	err = services.CreateRecipe(recipe)
 	if err == nil {
 		t.Error("Expected error for unimplemented CreateRecipe, got nil")
 	}
