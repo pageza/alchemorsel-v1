@@ -67,10 +67,12 @@ func InitializeDB(dsn string) error {
 func AutoMigrate() error {
 	// For PostgreSQL, ensure the uuid-ossp extension is created outside of a transaction.
 	if os.Getenv("DB_DRIVER") == "postgres" {
-		// Use a session that skips the default transaction since CREATE EXTENSION cannot run within one.
-		sess := DB.Session(&gorm.Session{SkipDefaultTransaction: true})
-		// Explicitly install the extension in the public schema so that uuid_generate_v4() is available.
-		if err := sess.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;").Error; err != nil {
+		// Use the underlying sql.DB connection directly so that the command runs in autocommit mode.
+		sqlDB, err := DB.DB()
+		if err != nil {
+			return fmt.Errorf("failed to get underlying sql.DB: %w", err)
+		}
+		if _, err := sqlDB.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
 			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
 		}
 	}
