@@ -72,12 +72,12 @@ func TestSaveRecipeHandler(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 
 	var recipe struct {
-		ID    float64 `json:"id"`
-		Title string  `json:"title"`
+		ID    string `json:"id"`
+		Title string `json:"title"`
 	}
 	err := json.Unmarshal(w.Body.Bytes(), &recipe)
 	assert.NoError(t, err)
-	assert.NotZero(t, recipe.ID)
+	assert.NotEmpty(t, recipe.ID)
 	assert.Equal(t, "New Recipe", recipe.Title)
 }
 

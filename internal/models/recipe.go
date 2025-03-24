@@ -3,11 +3,14 @@ package models
 import (
 	"time"
 
+	"github.com/google/uuid"
+
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
 
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 // Define a custom type for a slice of float64
@@ -33,7 +36,7 @@ func (f *Float64Slice) Scan(value interface{}) error {
 
 // Recipe represents a recipe in the application.
 type Recipe struct {
-	ID                string         `json:"id" gorm:"primaryKey;type:char(36)"`
+	ID                string         `json:"id" gorm:"type:uuid;default:uuid_generate_v4();primaryKey"`
 	Title             string         `json:"title"`
 	Ingredients       datatypes.JSON `json:"ingredients" gorm:"type:json"` // Stored as a JSON array
 	Steps             datatypes.JSON `json:"steps" gorm:"type:json"`       // Stored as a JSON array
@@ -58,4 +61,13 @@ type Recipe struct {
 	Difficulty    string         `json:"difficulty"` // e.g., "Easy", "Medium", "Hard"
 	PrepTime      int            `json:"prep_time"`  // in minutes
 	CookTime      int            `json:"cook_time"`  // in minutes
+}
+
+// BeforeCreate is a GORM hook that runs before a new record is inserted.
+// It ensures that a new UUID is generated if the ID is empty.
+func (r *Recipe) BeforeCreate(tx *gorm.DB) (err error) {
+	if r.ID == "" {
+		r.ID = uuid.New().String()
+	}
+	return nil
 }
