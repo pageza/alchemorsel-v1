@@ -41,14 +41,18 @@ jobs:
       - name: Run Integration Tests
         run: go test -v ./tests/integration/...
 
-      - name: Build Docker image
+      - name: Build Docker image for service
         run: docker build -t recipeservice .
 
-      - name: Create Docker network for CI tests
+      - name: Create Docker network for E2E tests
         run: docker network create ci_network || true
 
-      - name: Start Postgres container for CI tests
-        run: docker run -d --name postgres --network ci_network -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=ci_password -e POSTGRES_DB=ci_recipesdb -p 5432:5432 ankane/pgvector
+      - name: Run Postgres container for E2E tests
+        run: docker run -d --name ci_postgres --network ci_network \
+               -e POSTGRES_USER=postgres \
+               -e POSTGRES_PASSWORD=ci_password \
+               -e POSTGRES_DB=ci_recipesdb \
+               -p 5432:5432 ankane/pgvector
 
       - name: Wait for Postgres to be ready
         run: |
@@ -64,8 +68,15 @@ jobs:
           echo "Postgres did not become ready in time."
           exit 1
 
-      - name: Run Docker container for E2E tests
-        run: docker run -d --env-file .env.ci --network ci_network -p 8080:8080 --name recipeservice recipeservice
+      - name: Run service container for E2E tests
+        run: docker run -d --network ci_network -p 8080:8080 --name recipeservice \
+               --env POSTGRES_HOST=ci_postgres \
+               --env POSTGRES_PORT=5432 \
+               --env POSTGRES_USER=postgres \
+               --env POSTGRES_PASSWORD=ci_password \
+               --env POSTGRES_DB=ci_recipesdb \
+               --env JWT_SECRET=testsecret \
+               recipeservice
 
       - name: Wait for service to be ready
         run: |
@@ -86,6 +97,13 @@ jobs:
 
       - name: Run Newman E2E tests
         run: newman run tests/collections/user_endpoints.postman_collection.json --delay-request 500
+
+      - name: Cleanup E2E containers
+        if: always()
+        run: |
+          docker stop recipeservice ci_postgres || true
+          docker rm recipeservice ci_postgres || true
+          docker network rm ci_network || true
 
       - name: Print Docker logs
         if: always()
