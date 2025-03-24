@@ -2,8 +2,15 @@
 version: '3'
 services:
   app:
+    container_name: recipeservice
     build: .
     ports:
       - "8080:8080"
     env_file:
-      - .env.ci 
+      - .env.ci
+    networks:
+      - ci_network
+
+networks:
+  ci_network:
+    external: true 
