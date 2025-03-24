@@ -65,7 +65,7 @@ jobs:
           exit 1
 
       - name: Run service container for E2E tests
-        run: docker run -d --network ci_network -p 8080:8080 --name recipeservice --env PORT=8080 --env DB_DRIVER=postgres --env JWT_SECRET=testsecret --env DB_SOURCE="host=ci_postgres port=5432 user=postgres password=ci_password dbname=ci_recipesdb sslmode=disable" --env POSTGRES_HOST=ci_postgres --env POSTGRES_PORT=5432 --env POSTGRES_USER=postgres --env POSTGRES_PASSWORD=ci_password --env POSTGRES_DB=ci_recipesdb recipeservice
+        run: docker run -d --network ci_network -p 8080:8080 --name recipeservice --env HOST=0.0.0.0 --env PORT=8080 --env DB_DRIVER=postgres --env JWT_SECRET=testsecret --env DB_SOURCE="host=ci_postgres port=5432 user=postgres password=ci_password dbname=ci_recipesdb sslmode=disable" --env POSTGRES_HOST=ci_postgres --env POSTGRES_PORT=5432 --env POSTGRES_USER=postgres --env POSTGRES_PASSWORD=ci_password --env POSTGRES_DB=ci_recipesdb recipeservice
 
       - name: Wait for service to be ready
         run: |
