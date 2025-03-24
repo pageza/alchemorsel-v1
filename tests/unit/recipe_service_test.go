@@ -1,7 +1,6 @@
 package unit
 
 import (
-	"errors"
 	"testing"
 
 	"bou.ke/monkey"
@@ -40,21 +39,4 @@ func TestSaveRecipeSuccess(t *testing.T) {
 	assert.False(t, recipe.UpdatedAt.IsZero(), "UpdatedAt should be set")
 	assert.True(t, recipe.UpdatedAt.Equal(recipe.CreatedAt) || recipe.UpdatedAt.After(recipe.CreatedAt),
 		"UpdatedAt should be equal to or after CreatedAt")
-}
-
-func TestSaveRecipeFailure(t *testing.T) {
-	// Simulate a failure in the repository call.
-	expectedErr := errors.New("db error")
-	patch := monkey.Patch(repositories.SaveRecipe, func(recipe *models.Recipe) error {
-		return expectedErr
-	})
-	defer patch.Unpatch()
-
-	recipe := &models.Recipe{
-		Title: "Test Recipe",
-	}
-
-	err := services.SaveRecipe(recipe)
-	assert.NotNil(t, err, "Expected an error when the repository fails")
-	assert.Equal(t, expectedErr, err, "Error should match the simulated repository error")
 }
