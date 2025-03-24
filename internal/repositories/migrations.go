@@ -65,13 +65,13 @@ func InitializeDB(dsn string) error {
 
 // AutoMigrate runs database migrations for our models.
 func AutoMigrate() error {
-	// For PostgreSQL, ensure the uuid-ossp extension is enabled in the public schema.
+	// For PostgreSQL, set the search_path to include public and pg_catalog before creating the extension.
 	if os.Getenv("DB_DRIVER") == "postgres" {
-		if err := DB.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;").Error; err != nil {
-			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
+		if err := DB.Exec("SET search_path TO public, pg_catalog;").Error; err != nil {
+			return fmt.Errorf("failed to set search_path: %w", err)
 		}
-		if err := DB.Exec("SET search_path TO public;").Error; err != nil {
-			return fmt.Errorf("failed to set search_path to public: %w", err)
+		if err := DB.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";").Error; err != nil {
+			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
 		}
 	}
 

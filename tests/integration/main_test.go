@@ -60,6 +60,8 @@ func TestMain(m *testing.M) {
 	os.Setenv("POSTGRES_USER", "postgres")
 	os.Setenv("POSTGRES_PASSWORD", "testpass")
 	os.Setenv("POSTGRES_DB", "testdb")
+	// Set the JWT secret so that login endpoints can sign tokens successfully.
+	os.Setenv("JWT_SECRET", "testsecret")
 
 	code := m.Run()
 	os.Exit(code)

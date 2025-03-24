@@ -87,7 +87,7 @@ func TestIntegrationGetRecipe(t *testing.T) {
 func TestIntegrationSaveRecipe(t *testing.T) {
 	router := routes.SetupRouter()
 
-	reqBody := `{"title": "Integration Created Recipe", "ingredients": ["ing1"], "steps": ["step1"]}`
+	reqBody := `{"title": "Integration Created Recipe", "ingredients": ["ing1"], "steps": ["step1"], "approved": true}`
 	req, _ := http.NewRequest("POST", "/v1/recipes", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
