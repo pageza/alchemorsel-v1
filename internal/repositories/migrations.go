@@ -69,10 +69,8 @@ func AutoMigrate() error {
 	if os.Getenv("DB_DRIVER") == "postgres" {
 		// Use a session that skips the default transaction since CREATE EXTENSION cannot run within one.
 		sess := DB.Session(&gorm.Session{SkipDefaultTransaction: true})
-		if err := sess.Exec("SET search_path TO public, pg_catalog;").Error; err != nil {
-			return fmt.Errorf("failed to set search_path: %w", err)
-		}
-		if err := sess.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";").Error; err != nil {
+		// Explicitly install the extension in the public schema so that uuid_generate_v4() is available.
+		if err := sess.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;").Error; err != nil {
 			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
 		}
 	}
