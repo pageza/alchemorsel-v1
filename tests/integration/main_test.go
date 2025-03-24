@@ -51,13 +51,13 @@ func TestMain(m *testing.M) {
 
 	// Set environment variables so that the application uses the ephemeral Postgres instance.
 	os.Setenv("DB_DRIVER", "postgres")
-	dsn := fmt.Sprintf("host=%s port=%s user=testuser password=testpass dbname=testdb sslmode=disable", host, mappedPort.Port())
+	dsn := fmt.Sprintf("host=%s port=%s user=postgres password=testpass dbname=testdb sslmode=disable", host, mappedPort.Port())
 	os.Setenv("DB_SOURCE", dsn)
 
 	// Also set the individual Postgres environment variables required by other parts of the code.
 	os.Setenv("POSTGRES_HOST", host)
 	os.Setenv("POSTGRES_PORT", mappedPort.Port())
-	os.Setenv("POSTGRES_USER", "testuser")
+	os.Setenv("POSTGRES_USER", "postgres")
 	os.Setenv("POSTGRES_PASSWORD", "testpass")
 	os.Setenv("POSTGRES_DB", "testdb")
 

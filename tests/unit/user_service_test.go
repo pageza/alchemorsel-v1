@@ -56,7 +56,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	dsn := fmt.Sprintf("host=%s port=%s user=testuser password=testpass dbname=testdb sslmode=disable", host, mappedPort.Port())
+	dsn := fmt.Sprintf("host=%s port=%s user=postgres password=testpass dbname=testdb sslmode=disable", host, mappedPort.Port())
 
 	db.DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
