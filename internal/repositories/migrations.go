@@ -70,6 +70,9 @@ func AutoMigrate() error {
 		if err := DB.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;").Error; err != nil {
 			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
 		}
+		if err := DB.Exec("SET search_path TO public;").Error; err != nil {
+			return fmt.Errorf("failed to set search_path to public: %w", err)
+		}
 	}
 
 	return DB.AutoMigrate(
