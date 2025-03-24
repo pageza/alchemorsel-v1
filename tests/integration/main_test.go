@@ -18,7 +18,7 @@ func TestMain(m *testing.M) {
 		Image:        "postgres:13", // Use a stable Postgres version matching production
 		ExposedPorts: []string{"5432/tcp"},
 		Env: map[string]string{
-			"POSTGRES_USER":     "testuser",
+			"POSTGRES_USER":     "postgres",
 			"POSTGRES_PASSWORD": "testpass",
 			"POSTGRES_DB":       "testdb",
 		},

@@ -65,6 +65,13 @@ func InitializeDB(dsn string) error {
 
 // AutoMigrate runs database migrations for our models.
 func AutoMigrate() error {
+	// For PostgreSQL, ensure the uuid-ossp extension is enabled.
+	if os.Getenv("DB_DRIVER") == "postgres" {
+		if err := DB.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";").Error; err != nil {
+			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
+		}
+	}
+
 	return DB.AutoMigrate(
 		&models.User{},
 		&models.Recipe{},
