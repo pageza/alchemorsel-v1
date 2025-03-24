@@ -65,7 +65,7 @@ jobs:
           exit 1
 
       - name: Run service container for E2E tests using docker-compose
-        run: docker-compose -f docker-compose.ci.yml up -d
+        run: docker compose -f docker-compose.ci.yml up -d
 
       - name: Wait for service to be ready
         run: |
@@ -90,7 +90,7 @@ jobs:
       - name: Cleanup E2E containers
         if: always()
         run: |
-          docker-compose -f docker-compose.ci.yml down
+          docker compose -f docker-compose.ci.yml down
           docker stop ci_postgres || true
           docker rm ci_postgres || true
           docker network rm ci_network || true
@@ -101,4 +101,4 @@ jobs:
 
       - name: Stop Docker container
         if: always()
-        run: docker-compose -f docker-compose.ci.yml down 
+        run: docker compose -f docker-compose.ci.yml down 
