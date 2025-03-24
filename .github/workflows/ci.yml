@@ -1,22 +1,26 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
-          go-version: '1.16'
+          go-version: 1.20.5
 
       - name: Cache Go modules
         uses: actions/cache@v3
@@ -25,16 +29,68 @@ jobs:
             ~/.cache/go-build
             ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: go mod download
 
-      - name: Run Tests
-        env:
-          DB_DRIVER: postgres            # required for testcontainers-go usage
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: testpass
-          POSTGRES_DB: testdb
-          JWT_SECRET: testsecret
-          DOCKER_HOST: unix:///var/run/docker.sock  # ensure Docker is accessible
-        run: go test -v ./... 
+      - name: Run Unit Tests
+        run: go test -v ./tests/unit/...
+
+      - name: Run Integration Tests
+        run: go test -v ./tests/integration/...
+
+      - name: Build Docker image
+        run: docker build -t recipeservice .
+
+      - name: Create Docker network for CI tests
+        run: docker network create ci_network || true
+
+      - name: Start Postgres container for CI tests
+        run: docker run -d --name postgres --network ci_network -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=ci_password -e POSTGRES_DB=ci_recipesdb -p 5432:5432 ankane/pgvector
+
+      - name: Wait for Postgres to be ready
+        run: |
+          echo "Waiting for Postgres to be ready on port 5432..."
+          for i in {1..10}; do
+            if nc -z localhost 5432; then
+              echo "Postgres is ready!"
+              exit 0
+            fi
+            echo "Waiting... ($i/10)"
+            sleep 5
+          done
+          echo "Postgres did not become ready in time."
+          exit 1
+
+      - name: Run Docker container for E2E tests
+        run: docker run -d --env-file .env.ci --network ci_network -p 8080:8080 --name recipeservice recipeservice
+
+      - name: Wait for service to be ready
+        run: |
+          echo "Waiting for recipeservice to be ready on port 8080..."
+          for i in {1..10}; do
+            if nc -z localhost 8080; then
+              echo "recipeservice is up!"
+              exit 0
+            fi
+            echo "Waiting... ($i/10)"
+            sleep 5
+          done
+          echo "recipeservice did not become ready in time."
+          exit 1
+
+      - name: Install Newman
+        run: npm install -g newman
+
+      - name: Run Newman E2E tests
+        run: newman run tests/collections/user_endpoints.postman_collection.json --delay-request 500
+
+      - name: Print Docker logs
+        if: always()
+        run: docker logs recipeservice
+
+      - name: Stop Docker container
+        if: always()
+        run: docker stop recipeservice 
