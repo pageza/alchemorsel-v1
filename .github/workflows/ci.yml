@@ -48,11 +48,7 @@ jobs:
         run: docker network create ci_network || true
 
       - name: Run Postgres container for E2E tests
-        run: docker run -d --name ci_postgres --network ci_network \
-               -e POSTGRES_USER=postgres \
-               -e POSTGRES_PASSWORD=ci_password \
-               -e POSTGRES_DB=ci_recipesdb \
-               -p 5432:5432 ankane/pgvector
+        run: docker run -d --name ci_postgres --network ci_network -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=ci_password -e POSTGRES_DB=ci_recipesdb -p 5432:5432 ankane/pgvector
 
       - name: Wait for Postgres to be ready
         run: |
@@ -69,14 +65,7 @@ jobs:
           exit 1
 
       - name: Run service container for E2E tests
-        run: docker run -d --network ci_network -p 8080:8080 --name recipeservice \
-               --env POSTGRES_HOST=ci_postgres \
-               --env POSTGRES_PORT=5432 \
-               --env POSTGRES_USER=postgres \
-               --env POSTGRES_PASSWORD=ci_password \
-               --env POSTGRES_DB=ci_recipesdb \
-               --env JWT_SECRET=testsecret \
-               recipeservice
+        run: docker run -d --network ci_network -p 8080:8080 --name recipeservice --env POSTGRES_HOST=ci_postgres --env POSTGRES_PORT=5432 --env POSTGRES_USER=postgres --env POSTGRES_PASSWORD=ci_password --env POSTGRES_DB=ci_recipesdb --env JWT_SECRET=testsecret recipeservice
 
       - name: Wait for service to be ready
         run: |
