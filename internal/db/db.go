@@ -5,35 +5,16 @@ import (
 	"os"
 
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
+// DB is the global database connection instance
 var DB *gorm.DB
 
 // Init initializes the database connection.
 func Init() error {
-	driver := os.Getenv("DB_DRIVER")
-	if driver == "sqlite" {
-		source := os.Getenv("DB_SOURCE")
-		if source == "" {
-			return fmt.Errorf("DB_SOURCE must be set when DB_DRIVER is sqlite")
-		}
-		var err error
-		DB, err = gorm.Open(sqlite.Open(source), &gorm.Config{})
-		if err != nil {
-			return err
-		}
-		sqlDB, err := DB.DB()
-		if err != nil {
-			return err
-		}
-		// Limit to a single connection to ensure the persistent file/db is used consistently.
-		sqlDB.SetMaxOpenConns(1)
-		sqlDB.SetMaxIdleConns(1)
-		sqlDB.SetConnMaxLifetime(0)
-		return nil
-	}
+	// We now exclusively use Postgres.
+	// Ensure DB_DRIVER is set to "postgres" in the environment.
 
 	host := os.Getenv("POSTGRES_HOST")
 	port := os.Getenv("POSTGRES_PORT")
