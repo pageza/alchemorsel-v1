@@ -1,8 +1,6 @@
 package repositories
 
 import (
-	"errors"
-
 	"github.com/pageza/alchemorsel-v1/internal/models"
 )
 
@@ -19,15 +17,8 @@ func GetRecipe(id string) (*models.Recipe, error) {
 }
 
 // SaveRecipe inserts a new recipe into the database.
-// If recipe.Title is "simulate error", it returns a simulated database error.
 func SaveRecipe(recipe *models.Recipe) error {
-	if recipe.Title == "simulate error" {
-		return errors.New("db error")
-	}
-	if err := DB.Create(recipe).Error; err != nil {
-		return err
-	}
-	return nil
+	return DB.Create(recipe).Error
 }
 
 // UpdateRecipe modifies an existing recipe in the database.
