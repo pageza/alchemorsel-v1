@@ -77,10 +77,13 @@ func AutoMigrate() error {
 		if err != nil {
 			return fmt.Errorf("failed to get a database connection: %w", err)
 		}
-		defer conn.Close()
+		// Execute the extension creation and close the connection immediately,
+		// so that it doesn't hold the only available connection in the pool.
 		if _, err := conn.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
+			conn.Close()
 			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
 		}
+		conn.Close()
 	}
 
 	return DB.AutoMigrate(
