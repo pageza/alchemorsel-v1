@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/docker/go-connections/nat"
+	_ "github.com/lib/pq" // cursor-- Added to register the Postgres SQL driver for wait.ForSQL
 	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
