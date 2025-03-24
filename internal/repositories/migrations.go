@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -67,12 +68,17 @@ func InitializeDB(dsn string) error {
 func AutoMigrate() error {
 	// For PostgreSQL, ensure the uuid-ossp extension is created outside of a transaction.
 	if os.Getenv("DB_DRIVER") == "postgres" {
-		// Use the underlying sql.DB connection directly so that the command runs in autocommit mode.
+		// Obtain a dedicated connection to execute the command in autocommit mode.
 		sqlDB, err := DB.DB()
 		if err != nil {
 			return fmt.Errorf("failed to get underlying sql.DB: %w", err)
 		}
-		if _, err := sqlDB.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
+		conn, err := sqlDB.Conn(context.Background())
+		if err != nil {
+			return fmt.Errorf("failed to get a database connection: %w", err)
+		}
+		defer conn.Close()
+		if _, err := conn.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
 			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
 		}
 	}
