@@ -2,38 +2,80 @@ package unit
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
+	"time"
 
-	"gorm.io/driver/sqlite"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
 	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/services"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// TestMain sets up an in-memory SQLite database for unit tests.
+// TestMain sets up a PostgreSQL container for unit tests.
 func TestMain(m *testing.M) {
-	var err error
-	// Use SQLite in-memory for unit tests instead of PostgreSQL.
-	db.DB, err = gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	ctx := context.Background()
+
+	req := testcontainers.ContainerRequest{
+		Image:        "postgres:13", // Use a stable Postgres version matching production
+		ExposedPorts: []string{"5432/tcp"},
+		Env: map[string]string{
+			"POSTGRES_USER":     "testuser",
+			"POSTGRES_PASSWORD": "testpass",
+			"POSTGRES_DB":       "testdb",
+		},
+		WaitingFor: wait.ForListeningPort("5432/tcp").WithStartupTimeout(60 * time.Second),
+	}
+
+	postgresC, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
 	if err != nil {
+		fmt.Printf("Failed to start PostgreSQL container: %v\n", err)
+		os.Exit(1)
+	}
+	defer func() {
+		_ = postgresC.Terminate(ctx)
+	}()
+
+	host, err := postgresC.Host(ctx)
+	if err != nil {
+		fmt.Printf("Failed to get container host: %v\n", err)
+		os.Exit(1)
+	}
+	mappedPort, err := postgresC.MappedPort(ctx, "5432/tcp")
+	if err != nil {
+		fmt.Printf("Failed to get mapped port: %v\n", err)
 		os.Exit(1)
 	}
 
-	// AutoMigrate creates the required schema for the User model.
+	dsn := fmt.Sprintf("host=%s port=%s user=testuser password=testpass dbname=testdb sslmode=disable", host, mappedPort.Port())
+
+	db.DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		fmt.Printf("Failed to open database: %v\n", err)
+		os.Exit(1)
+	}
+
 	if err := db.DB.AutoMigrate(&models.User{}); err != nil {
+		fmt.Printf("Failed to auto-migrate: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Initialize the repositories DB so repository functions use the same connection.
-	if err := repositories.InitializeDB("file::memory:?cache=shared"); err != nil {
+	if err := repositories.InitializeDB(dsn); err != nil {
+		fmt.Printf("Failed to initialize repositories DB: %v\n", err)
 		os.Exit(1)
 	}
 
-	os.Exit(m.Run())
+	code := m.Run()
+	os.Exit(code)
 }
 
 func TestCreateUser(t *testing.T) {
