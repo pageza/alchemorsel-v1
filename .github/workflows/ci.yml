@@ -62,7 +62,7 @@ jobs:
           exit 1
 
       - name: Run service container for E2E tests using docker-compose
-        run: docker compose -f docker-compose.ci.yml up -d
+        run: docker-compose --env-file .env.ci up -d
 
       - name: Wait for service to be ready
         run: |
