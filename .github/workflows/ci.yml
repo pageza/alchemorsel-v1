@@ -50,9 +50,6 @@ jobs:
       - name: Create Docker network for E2E tests
         run: docker network create ci_network || true
 
-      - name: Run Postgres container for E2E tests
-        run: docker run -d --name ci_postgres --network ci_network -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=ci_password -e POSTGRES_DB=ci_recipesdb -p 5432:5432 ankane/pgvector
-
       - name: Wait for Postgres to be ready
         run: |
           echo "Waiting for Postgres to be ready on port 5432..."
