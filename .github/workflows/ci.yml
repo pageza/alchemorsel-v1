@@ -53,7 +53,7 @@ jobs:
       - name: Load environment variables from .env.ci
         run: |
           if [ -f .env.ci ]; then
-            export $(cat .env.ci | xargs)
+            export $(grep -v '^#' .env.ci | xargs)
           else
             echo ".env.ci file not found!"
             exit 1
