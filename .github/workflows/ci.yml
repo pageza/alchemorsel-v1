@@ -80,7 +80,13 @@ jobs:
           echo "Waiting for recipeservice to be ready..."
           timeout=30
           elapsed=0
-          until docker inspect --format='{{json .State.Health.Status}}' $(docker compose -p alchemorsel ps -q app) | grep -q '"healthy"'; do
+          CONTAINER_ID=$(docker compose -p alchemorsel ps -q app)
+          echo "App container ID: $CONTAINER_ID"
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "Failed to retrieve container ID for app."
+            exit 1
+          fi
+          until docker inspect --format='{{json .State.Health.Status}}' $CONTAINER_ID | grep -q '"healthy"'; do
             echo "Waiting... ($elapsed/$timeout seconds)"
             sleep 1
             elapsed=$((elapsed + 1))
