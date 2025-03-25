@@ -1,16 +1,16 @@
-version: "3.9"
-
 services:
   app:
+    container_name: recipeservice
     build: .
-    container_name: app
     ports:
       - "8080:8080"
+    env_file:
+      - .env  # This will be overridden by the --env-file option
+    networks:
+      - ci_network
     dns:
       - 8.8.8.8
       - 8.8.4.4
-    env_file:
-      - .env
     depends_on:
       - postgres
       - redis
@@ -24,6 +24,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
+    networks:
+      - ci_network
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
@@ -37,4 +39,8 @@ services:
 
 volumes:
   postgres-data:
-  redis-data: 
+  redis-data:
+
+networks:
+  ci_network:
+    external: true 
