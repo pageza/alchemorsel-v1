@@ -70,6 +70,9 @@ jobs:
       - name: Print current directory contents
         run: ls -la
 
+      - name: Set environment variable for CI
+        run: echo "MY_ENV_FILE=.env.ci" >> $GITHUB_ENV
+
       - name: Run service container for E2E tests using docker-compose
         run: docker compose --env-file .env.ci up -d
 

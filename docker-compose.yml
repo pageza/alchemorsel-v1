@@ -5,7 +5,7 @@ services:
     ports:
       - "8080:8080"
     env_file:
-      - .env # This will be overridden by the --env-file option
+      - ${MY_ENV_FILE:-.env} # Use MY_ENV_FILE if set, otherwise fallback to .env
     networks:
       - ci_network
     dns:
