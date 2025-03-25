@@ -99,6 +99,11 @@ jobs:
           echo "----- Recipeservice container environment variables -----"
           docker exec recipeservice env || echo "Could not exec into recipeservice container"
 
+      - name: Wait for DNS resolution for recipeservice on ci_network
+        run: |
+          echo "Waiting for DNS resolution for recipeservice..."
+          docker run --network ci_network --rm alpine sh -c 'until nslookup recipeservice; do echo "Waiting for DNS..."; sleep 1; done'
+
       - name: Install Newman
         run: npm install -g newman
 
