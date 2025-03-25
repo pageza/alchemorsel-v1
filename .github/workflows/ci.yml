@@ -96,6 +96,12 @@ jobs:
           echo "----- Recipeservice container environment variables -----"
           docker exec recipeservice env || echo "Could not exec into recipeservice container"
 
+      - name: Wait for recipeservice DNS resolution in network
+        run: docker run --network alchemorsel_ci_network --rm alpine sh -c "i=0; timeout=30; while [ $i -lt $timeout ]; do if getent hosts recipeservice; then exit 0; fi; echo 'Waiting for DNS resolution for recipeservice...'; i=$((i+1)); sleep 1; done; echo 'DNS resolution for recipeservice failed after $timeout seconds'; exit 1"
+
+      - name: Pause before Newman
+        run: sleep 10
+
       - name: Install Newman
         run: npm install -g newman
 
