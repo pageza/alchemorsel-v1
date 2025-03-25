@@ -104,6 +104,10 @@ jobs:
       - name: Pause before Newman
         run: sleep 10
 
+      - name: Wait for recipeservice HTTP response in network
+        run: |
+          docker run --network alchemorsel_ci_network --rm alpine sh -c "apk add --no-cache curl >/dev/null 2>&1 && i=0; timeout=30; while [ $i -lt $timeout ]; do if curl -sS http://recipeservice:8080 >/dev/null; then echo 'Got HTTP response from recipeservice'; exit 0; fi; echo 'Waiting for HTTP response from recipeservice...'; i=$((i+1)); sleep 1; done; echo 'HTTP response from recipeservice not received after $timeout seconds'; exit 1"
+
       - name: Install Newman
         run: npm install -g newman
 
