@@ -97,6 +97,7 @@ jobs:
           done
 
       - name: Debug recipeservice container environment
+        if: always()
         run: |
           echo "----- Inspecting app container -----"
           CONTAINER_ID=$(docker compose -p alchemorsel ps -q app)
