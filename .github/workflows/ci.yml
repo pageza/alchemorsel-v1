@@ -75,19 +75,20 @@ jobs:
           echo "Postgres did not become ready in time."
           exit 1
 
-      - name: Wait for service to be ready
+      - name: Wait for recipeservice to be ready
         run: |
-          echo "Waiting for recipeservice to be ready on port 8080..."
-          for i in {1..10}; do
-            if nc -z localhost 8080; then
-              echo "recipeservice is up!"
-              exit 0
+          echo "Waiting for recipeservice to be ready..."
+          timeout=30
+          elapsed=0
+          until docker inspect --format='{{json .State.Health.Status}}' $(docker compose -p alchemorsel ps -q app) | grep -q '"healthy"'; do
+            echo "Waiting... ($elapsed/$timeout seconds)"
+            sleep 1
+            elapsed=$((elapsed + 1))
+            if [ $elapsed -ge $timeout ]; then
+              echo "recipeservice did not become ready in time."
+              exit 1
             fi
-            echo "Waiting... ($i/10)"
-            sleep 5
           done
-          echo "recipeservice did not become ready in time."
-          exit 1
 
       - name: Debug recipeservice container environment
         run: |
