@@ -67,6 +67,9 @@ jobs:
           echo "Postgres did not become ready in time."
           exit 1
 
+      - name: Print current directory contents
+        run: ls -la
+
       - name: Run service container for E2E tests using docker-compose
         run: docker compose --env-file .env.ci up -d
 
