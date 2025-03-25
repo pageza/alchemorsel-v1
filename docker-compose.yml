@@ -1,6 +1,7 @@
 services:
   app:
     container_name: recipeservice
+    hostname: recipeservice
     build: .
     ports:
       - "8080:8080"
