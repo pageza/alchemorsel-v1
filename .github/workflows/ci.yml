@@ -80,6 +80,8 @@ jobs:
           echo "Waiting for recipeservice to be ready..."
           timeout=30
           elapsed=0
+          echo "Current Docker Compose services:"
+          docker compose -p alchemorsel ps
           CONTAINER_ID=$(docker compose -p alchemorsel ps -q app)
           echo "App container ID: $CONTAINER_ID"
           if [ -z "$CONTAINER_ID" ]; then
@@ -102,9 +104,13 @@ jobs:
           echo "----- Inspecting app container -----"
           CONTAINER_ID=$(docker compose -p alchemorsel ps -q app)
           echo "App container ID: $CONTAINER_ID"
-          docker inspect $CONTAINER_ID
-          echo "----- App container environment variables -----"
-          docker exec $CONTAINER_ID env || echo "Could not exec into app container"
+          if [ -n "$CONTAINER_ID" ]; then
+            docker inspect $CONTAINER_ID
+            echo "----- App container environment variables -----"
+            docker exec $CONTAINER_ID env || echo "Could not exec into app container"
+          else
+            echo "No container ID found for app."
+          fi
 
       - name: Wait for recipeservice DNS resolution in network
         run: docker run --network alchemorsel_ci_network --rm alpine sh -c "i=0; timeout=30; while [ $i -lt $timeout ]; do if getent hosts recipeservice; then exit 0; fi; echo 'Waiting for DNS resolution for recipeservice...'; i=$((i+1)); sleep 1; done; echo 'DNS resolution for recipeservice failed after $timeout seconds'; exit 1"
