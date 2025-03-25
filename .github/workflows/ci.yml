@@ -132,4 +132,8 @@ jobs:
 
       - name: Stop Docker container
         if: always()
-        run: docker compose down 
+        run: docker compose down
+
+      - name: Print recipeservice logs
+        if: always()
+        run: docker logs $(docker compose -p alchemorsel ps -q app) 
