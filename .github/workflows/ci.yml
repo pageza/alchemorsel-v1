@@ -56,7 +56,7 @@ jobs:
           cat .env.ci
 
       - name: Create Docker network for E2E tests
-        run: docker network create ci_network || true
+        run: docker network create alchemorsel_ci_network || true
 
       - name: Run service container for E2E tests using docker-compose
         run: docker compose --env-file .env.ci up -d
@@ -99,26 +99,11 @@ jobs:
           echo "----- Recipeservice container environment variables -----"
           docker exec recipeservice env || echo "Could not exec into recipeservice container"
 
-      - name: Wait for DNS resolution for recipeservice on ci_network
-        run: |
-          echo "Waiting for DNS resolution for recipeservice..."
-          timeout=30
-          elapsed=0
-          until docker run --network ci_network --rm alpine sh -c 'until nslookup recipeservice.; do echo "Waiting for DNS..."; sleep 1; done'; do
-            echo "Waiting for DNS... ($elapsed/$timeout seconds)"
-            sleep 1
-            elapsed=$((elapsed + 1))
-            if [ $elapsed -ge $timeout ]; then
-              echo "DNS resolution for recipeservice timed out after ${timeout} seconds."
-              exit 1
-            fi
-          done
-
       - name: Install Newman
         run: npm install -g newman
 
       - name: Run Newman E2E tests
-        run: docker run --network ci_network --rm -v $(pwd)/tests:/etc/newman postman/newman:alpine run /etc/newman/collections/user_endpoints.postman_collection.json --env-var "baseUrl=http://recipeservice:8080" --delay-request 500
+        run: docker run --network alchemorsel_ci_network --rm -v $(pwd)/tests:/etc/newman postman/newman:alpine run /etc/newman/collections/user_endpoints.postman_collection.json --env-var "baseUrl=http://recipeservice:8080" --delay-request 500
 
       - name: Cleanup E2E containers
         if: always()
@@ -126,7 +111,7 @@ jobs:
           docker compose down
           docker stop ci_postgres || true
           docker rm ci_postgres || true
-          docker network rm ci_network || true
+          docker network rm alchemorsel_ci_network || true
 
       - name: Print Docker logs
         if: always()
