@@ -103,7 +103,7 @@ jobs:
         run: npm install -g newman
 
       - name: Run Newman E2E tests
-        run: docker run --network host --rm -v $(pwd)/tests:/etc/newman postman/newman:alpine run /etc/newman/collections/user_endpoints.postman_collection.json --delay-request 500
+        run: docker run --network ci_network --rm -v $(pwd)/tests:/etc/newman postman/newman:alpine run /etc/newman/collections/user_endpoints.postman_collection.json --env-var "baseUrl=http://recipeservice:8080" --delay-request 500
 
       - name: Cleanup E2E containers
         if: always()
