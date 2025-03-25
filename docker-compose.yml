@@ -5,7 +5,7 @@ services:
     ports:
       - "8080:8080"
     env_file:
-      - .env.ci               # Using .env.ci directly for CI environment variables.
+      - .env.ci               # Using .env.ci directly for CI testing; TODO: override with .env in production.
     networks:
       - ci_network
     dns:
