@@ -78,7 +78,7 @@ jobs:
       - name: Wait for app service to be ready
         run: |
           echo "Waiting for app service to be ready..."
-          timeout=30
+          timeout=60
           elapsed=0
           CONTAINER_ID=$(docker compose -p alchemorsel ps -q app)
           echo "App container ID: $CONTAINER_ID"
