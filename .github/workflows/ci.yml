@@ -47,8 +47,16 @@ jobs:
       - name: Run Integration Tests
         run: go test -v ./tests/integration/...
 
-      - name: Set environment variable for CI
-        run: echo "MY_ENV_FILE=.env.ci" >> $GITHUB_ENV
+      # - name: Set environment variable for CI
+      #   run: echo "MY_ENV_FILE=.env.ci" >> $GITHUB_ENV
+
+      - name: Debug .env.ci file
+        run: |
+          echo "----- .env.ci file contents -----"
+          cat .env.ci
+
+      - name: Create Docker network for E2E tests
+        run: docker network create ci_network || true
 
       - name: Run service container for E2E tests using docker-compose
         run: docker compose --env-file .env.ci up -d
@@ -83,6 +91,13 @@ jobs:
           done
           echo "recipeservice did not become ready in time."
           exit 1
+
+      - name: Debug recipeservice container environment
+        run: |
+          echo "----- Inspecting recipeservice container -----"
+          docker inspect recipeservice
+          echo "----- Recipeservice container environment variables -----"
+          docker exec recipeservice env || echo "Could not exec into recipeservice container"
 
       - name: Install Newman
         run: npm install -g newman
