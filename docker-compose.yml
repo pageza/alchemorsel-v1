@@ -45,4 +45,4 @@ volumes:
 networks:
   ci_network:
     driver: bridge
-    name: ci_network 
+    name: alchemorsel_ci_network 
