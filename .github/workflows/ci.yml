@@ -75,13 +75,11 @@ jobs:
           echo "Postgres did not become ready in time."
           exit 1
 
-      - name: Wait for recipeservice to be ready
+      - name: Wait for app service to be ready
         run: |
-          echo "Waiting for recipeservice to be ready..."
+          echo "Waiting for app service to be ready..."
           timeout=30
           elapsed=0
-          echo "Current Docker Compose services:"
-          docker compose -p alchemorsel ps
           CONTAINER_ID=$(docker compose -p alchemorsel ps -q app)
           echo "App container ID: $CONTAINER_ID"
           if [ -z "$CONTAINER_ID" ]; then
@@ -93,24 +91,16 @@ jobs:
             sleep 1
             elapsed=$((elapsed + 1))
             if [ $elapsed -ge $timeout ]; then
-              echo "recipeservice did not become ready in time."
+              echo "App service did not become ready in time."
               exit 1
             fi
           done
 
-      - name: Debug recipeservice container environment
+      - name: Print app service logs
         if: always()
         run: |
-          echo "----- Inspecting app container -----"
-          CONTAINER_ID=$(docker compose -p alchemorsel ps -q app)
-          echo "App container ID: $CONTAINER_ID"
-          if [ -n "$CONTAINER_ID" ]; then
-            docker inspect $CONTAINER_ID
-            echo "----- App container environment variables -----"
-            docker exec $CONTAINER_ID env || echo "Could not exec into app container"
-          else
-            echo "No container ID found for app."
-          fi
+          echo "Logs for app container:"
+          docker logs alchemorsel-app-1 || echo "No logs for app container"
 
       - name: Wait for recipeservice DNS resolution in network
         run: docker run --network alchemorsel_ci_network --rm alpine sh -c "i=0; timeout=30; while [ $i -lt $timeout ]; do if getent hosts recipeservice; then exit 0; fi; echo 'Waiting for DNS resolution for recipeservice...'; i=$((i+1)); sleep 1; done; echo 'DNS resolution for recipeservice failed after $timeout seconds'; exit 1"
