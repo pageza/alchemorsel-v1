@@ -55,7 +55,6 @@ jobs:
           if [ -f .env.ci ]; then
             echo "Loading environment variables from .env.ci"
             cat .env.ci  # Print the contents of the .env.ci file for debugging
-            export $(grep -v '^#' .env.ci | xargs)
           else
             echo ".env.ci file not found!"
             exit 1
@@ -68,6 +67,12 @@ jobs:
 
       - name: Create Docker network for E2E tests
         run: docker network create ci_network || true
+
+      - name: Run service container for E2E tests using docker-compose
+        run: docker compose --env-file .env.ci up -d
+
+      - name: Check PostgreSQL logs
+        run: docker logs postgres || true
 
       - name: Wait for Postgres to be ready
         run: |
@@ -82,15 +87,6 @@ jobs:
           done
           echo "Postgres did not become ready in time."
           exit 1
-
-      - name: Print current directory contents
-        run: ls -la
-
-      - name: Run service container for E2E tests using docker-compose
-        run: docker compose --env-file .env.ci up -d
-
-      - name: Check PostgreSQL logs
-        run: docker logs postgres || true
 
       - name: Wait for service to be ready
         run: |
