@@ -104,7 +104,7 @@ jobs:
           echo "Waiting for DNS resolution for recipeservice..."
           timeout=30
           elapsed=0
-          until docker run --network ci_network --rm alpine nslookup recipeservice; do
+          until docker run --network ci_network --rm alpine sh -c 'until nslookup recipeservice.; do echo "Waiting for DNS..."; sleep 1; done'; do
             echo "Waiting for DNS... ($elapsed/$timeout seconds)"
             sleep 1
             elapsed=$((elapsed + 1))
