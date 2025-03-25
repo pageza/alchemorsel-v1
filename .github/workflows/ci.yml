@@ -137,4 +137,7 @@ jobs:
 
       - name: Print recipeservice logs
         if: always()
-        run: docker logs $(docker compose -p alchemorsel ps -q app) 
+        run: |
+          CONTAINER_ID=$(docker compose -p alchemorsel ps -q app)
+          echo "App container ID: $CONTAINER_ID"
+          docker logs $CONTAINER_ID 
