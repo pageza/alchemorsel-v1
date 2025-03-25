@@ -53,11 +53,18 @@ jobs:
       - name: Load environment variables from .env.ci
         run: |
           if [ -f .env.ci ]; then
+            echo "Loading environment variables from .env.ci"
+            cat .env.ci  # Print the contents of the .env.ci file for debugging
             export $(grep -v '^#' .env.ci | xargs)
           else
             echo ".env.ci file not found!"
             exit 1
           fi
+
+      - name: Debug Loaded Environment Variables
+        run: |
+          echo "Loaded Environment Variables:"
+          env | grep POSTGRES  # Print only the relevant environment variables
 
       - name: Create Docker network for E2E tests
         run: docker network create ci_network || true
