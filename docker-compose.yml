@@ -7,7 +7,9 @@ services:
     env_file:
       - .env.ci               # Using .env.ci directly for CI testing; TODO: override with .env in production.
     networks:
-      - ci_network
+      ci_network:
+        aliases:
+          - recipeservice
     dns:
       - 8.8.8.8
       - 8.8.4.4
