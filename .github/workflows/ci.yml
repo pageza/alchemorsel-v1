@@ -70,6 +70,15 @@ jobs:
       - name: Set environment variable for CI
         run: echo "MY_ENV_FILE=.env.ci" >> $GITHUB_ENV
 
+      - name: Load environment variables from .env.ci
+        run: |
+          if [ -f .env.ci ]; then
+            export $(cat .env.ci | xargs)
+          else
+            echo ".env.ci file not found!"
+            exit 1
+          fi
+
       - name: Run service container for E2E tests using docker-compose
         run: docker compose --env-file .env.ci up -d
 
