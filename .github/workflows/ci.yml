@@ -82,6 +82,9 @@ jobs:
       - name: Run service container for E2E tests using docker-compose
         run: docker compose --env-file .env.ci up -d
 
+      - name: Check PostgreSQL logs
+        run: docker logs postgres || true
+
       - name: Wait for service to be ready
         run: |
           echo "Waiting for recipeservice to be ready on port 8080..."
