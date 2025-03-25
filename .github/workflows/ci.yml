@@ -55,11 +55,8 @@ jobs:
           echo "----- .env.ci file contents -----"
           cat .env.ci
 
-      - name: Create Docker network for E2E tests
-        run: docker network create alchemorsel_ci_network || true
-
       - name: Run service container for E2E tests using docker-compose
-        run: docker compose --env-file .env.ci up -d
+        run: docker compose -p alchemorsel --env-file .env.ci up -d
 
       - name: Check PostgreSQL logs
         run: docker logs postgres || true
@@ -108,10 +105,7 @@ jobs:
       - name: Cleanup E2E containers
         if: always()
         run: |
-          docker compose down
-          docker stop ci_postgres || true
-          docker rm ci_postgres || true
-          docker network rm alchemorsel_ci_network || true
+          docker compose -p alchemorsel down
 
       - name: Print Docker logs
         if: always()
