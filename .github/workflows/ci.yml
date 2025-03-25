@@ -17,6 +17,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Set up Docker
+        uses: docker/setup-qemu-action@v2
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
@@ -62,7 +68,7 @@ jobs:
           exit 1
 
       - name: Run service container for E2E tests using docker-compose
-        run: docker-compose --env-file .env.ci up -d
+        run: docker compose --env-file .env.ci up -d
 
       - name: Wait for service to be ready
         run: |
@@ -87,7 +93,7 @@ jobs:
       - name: Cleanup E2E containers
         if: always()
         run: |
-          docker compose -f docker-compose.ci.yml down
+          docker compose down
           docker stop ci_postgres || true
           docker rm ci_postgres || true
           docker network rm ci_network || true
@@ -98,4 +104,4 @@ jobs:
 
       - name: Stop Docker container
         if: always()
-        run: docker compose -f docker-compose.ci.yml down 
+        run: docker compose down 
