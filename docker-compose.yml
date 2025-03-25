@@ -44,4 +44,5 @@ volumes:
 
 networks:
   ci_network:
-    external: true 
+    driver: bridge
+    name: ci_network 
