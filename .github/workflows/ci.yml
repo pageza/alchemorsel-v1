@@ -69,6 +69,7 @@ jobs:
           exit 1
 
       - name: Inspect app health logs
+        if: always()
         run: docker inspect -f '{{json .State.Health.Log}}' app
 
       - name: Run Newman E2E Tests
