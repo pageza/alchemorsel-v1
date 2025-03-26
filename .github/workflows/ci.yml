@@ -58,6 +58,12 @@ jobs:
       - name: Display Docker Containers
         run: docker ps
 
+      - name: Display All Containers
+        run: docker ps -a
+
+      - name: Inspect app logs
+        run: docker logs app
+
       - name: Wait for HTTP health
         run: |
           for i in {1..30}; do
