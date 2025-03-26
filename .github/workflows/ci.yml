@@ -68,6 +68,9 @@ jobs:
           echo "App did not become healthy in time"
           exit 1
 
+      - name: Inspect app health logs
+        run: docker inspect -f '{{json .State.Health.Log}}' app
+
       - name: Run Newman E2E Tests
         run: |
           docker run --rm --network container:app \
