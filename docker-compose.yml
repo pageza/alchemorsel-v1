@@ -17,6 +17,7 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
       interval: 10s
       timeout: 5s
+      start_period: 30s
       retries: 5
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
