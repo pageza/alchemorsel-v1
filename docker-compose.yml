@@ -14,7 +14,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
+      test: ["CMD", "sh", "-c", "set -x; curl -v http://localhost:8080/v1/health || (echo 'Healthcheck failed with code $?'; exit 1)"]
       interval: 10s
       timeout: 5s
       start_period: 60s
