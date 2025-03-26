@@ -1,32 +1,24 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-name: CI
+name: CI Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Set up Docker
-        uses: docker/setup-qemu-action@v2
 
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.24
+          go-version: '1.21'
 
       - name: Cache Go modules
         uses: actions/cache@v3
@@ -42,98 +34,38 @@ jobs:
         run: go mod download
 
       - name: Run Unit Tests
-        run: go test -v ./tests/unit/...
+        run: go test -v ./...
+
+      - name: Start Docker Services
+        run: docker compose -f docker-compose.yml --env-file .env.ci up -d --wait --wait-timeout 60
 
       - name: Run Integration Tests
         run: go test -v ./tests/integration/...
 
-      # - name: Set environment variable for CI
-      #   run: echo "MY_ENV_FILE=.env.ci" >> $GITHUB_ENV
-
-      - name: Debug .env.ci file
+      - name: Wait for HTTP health
         run: |
-          echo "----- .env.ci file contents -----"
-          cat .env.ci
-
-      - name: Run service container for E2E tests using docker-compose
-        run: docker compose -p alchemorsel --env-file .env.ci up -d
-
-      - name: Check PostgreSQL logs
-        run: docker logs postgres || true
-
-      - name: Wait for Postgres to be ready
-        run: |
-          echo "Waiting for Postgres to be ready on port 5432..."
-          for i in {1..10}; do
-            if nc -z localhost 5432; then
-              echo "Postgres is ready!"
+          for i in {1..30}; do
+            if curl -s http://localhost:8080/health; then
+              echo "App is ready"
               exit 0
             fi
-            echo "Waiting... ($i/10)"
-            sleep 5
+            echo "Waiting for app to become healthy..."
+            sleep 1
           done
-          echo "Postgres did not become ready in time."
+          echo "App did not become healthy in time"
           exit 1
 
-      - name: Wait for app service to be ready
+      - name: Run Newman E2E Tests
         run: |
-          echo "Waiting for app service to be ready..."
-          timeout=60
-          elapsed=0
-          CONTAINER_ID=$(docker compose -p alchemorsel ps -q app)
-          echo "App container ID: $CONTAINER_ID"
-          if [ -z "$CONTAINER_ID" ]; then
-            echo "Failed to retrieve container ID for app."
-            exit 1
-          fi
-          until docker inspect --format='{{json .State.Health.Status}}' $CONTAINER_ID | grep -q '"healthy"'; do
-            echo "Waiting... ($elapsed/$timeout seconds)"
-            sleep 1
-            elapsed=$((elapsed + 1))
-            if [ $elapsed -ge $timeout ]; then
-              echo "App service did not become ready in time."
-              exit 1
-            fi
-          done
+          docker run --rm --network container:app \
+            -v ${{ github.workspace }}/tests:/etc/newman \
+            postman/newman:alpine run /etc/newman/collections/e2e_collection.json \
+              --env-var "baseUrl=http://localhost:8080" --delay-request 500
 
-      - name: Print app service logs
+      - name: Print logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.yml logs
+
+      - name: Cleanup
         if: always()
-        run: |
-          echo "Logs for app container:"
-          docker logs alchemorsel-app-1 || echo "No logs for app container"
-
-      - name: Wait for recipeservice DNS resolution in network
-        run: docker run --network alchemorsel_ci_network --rm alpine sh -c "i=0; timeout=30; while [ $i -lt $timeout ]; do if getent hosts recipeservice; then exit 0; fi; echo 'Waiting for DNS resolution for recipeservice...'; i=$((i+1)); sleep 1; done; echo 'DNS resolution for recipeservice failed after $timeout seconds'; exit 1"
-
-      - name: Pause before Newman
-        run: sleep 10
-
-      - name: Wait for recipeservice HTTP response in network
-        run: |
-          docker run --network alchemorsel_ci_network --rm alpine sh -c "apk add --no-cache curl >/dev/null 2>&1 && i=0; timeout=30; while [ $i -lt $timeout ]; do if curl -sS http://recipeservice:8080 >/dev/null; then echo 'Got HTTP response from recipeservice'; exit 0; fi; echo 'Waiting for HTTP response from recipeservice...'; i=$((i+1)); sleep 1; done; echo 'HTTP response from recipeservice not received after $timeout seconds'; exit 1"
-
-      - name: Install Newman
-        run: npm install -g newman
-
-      - name: Run Newman E2E tests
-        run: docker run --network alchemorsel_ci_network --rm -v $(pwd)/tests:/etc/newman postman/newman:alpine run /etc/newman/collections/user_endpoints.postman_collection.json --env-var "baseUrl=http://recipeservice:8080" --delay-request 500
-
-      - name: Cleanup E2E containers
-        if: always()
-        run: |
-          docker compose -p alchemorsel down
-
-      - name: Print Docker logs
-        if: always()
-        run: docker logs recipeservice
-
-      - name: Stop Docker container
-        if: always()
-        run: docker compose down
-
-      - name: Print recipeservice logs
-        if: always()
-        run: |
-          CONTAINER_ID=$(docker compose -p alchemorsel ps -q app)
-          echo "App container ID: $CONTAINER_ID"
-          docker logs $CONTAINER_ID 
+        run: docker compose -f docker-compose.yml down -v 

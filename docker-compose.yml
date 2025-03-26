@@ -1,20 +1,22 @@
+version: "3.9"
+
 services:
   app:
     build: .
+    container_name: app
+    env_file:
+      - .env.ci
+    networks:
+      - appnet
     ports:
       - "8080:8080"
-    env_file:
-      - .env.ci               # Using .env.ci directly for CI testing; TODO: override with .env in production.
-    networks:
-      ci_network:
-        aliases:
-          - recipeservice
-
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,28 +28,37 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    networks:
+      - appnet
     ports:
       - "5432:5432"
-    networks:
-      - ci_network
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:latest
     container_name: redis
+    networks:
+      - appnet
     ports:
       - "6379:6379"
-    networks:
-      - ci_network
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres-data:
   redis-data:
 
 networks:
-  ci_network:
+  appnet:
     driver: bridge
-    name: alchemorsel_ci_network
