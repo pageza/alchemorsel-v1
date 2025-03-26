@@ -55,6 +55,9 @@ jobs:
       - name: Run Integration Tests
         run: go test -v ./tests/integration/...
 
+      - name: Display Docker Containers
+        run: docker ps
+
       - name: Wait for HTTP health
         run: |
           for i in {1..30}; do
@@ -78,6 +81,10 @@ jobs:
             -v ${{ github.workspace }}/tests:/etc/newman \
             postman/newman:alpine run /etc/newman/collections/e2e_collection.json \
               --env-var "baseUrl=http://localhost:8080" --delay-request 500
+
+      - name: Dump Docker Container Logs
+        if: always()
+        run: docker compose -f docker-compose.yml logs
 
       - name: Print logs on failure
         if: failure()
