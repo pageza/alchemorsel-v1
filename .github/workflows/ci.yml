@@ -37,6 +37,10 @@ jobs:
         run: go test -v ./...
 
       - name: Start Docker Services
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
         run: docker compose -f docker-compose.yml --env-file .env.ci up -d --wait --wait-timeout 60
 
       - name: Run Integration Tests
