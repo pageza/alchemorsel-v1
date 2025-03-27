@@ -15,6 +15,7 @@ type RecipeServiceInterface interface {
 	ListRecipes() ([]*models.Recipe, error)
 	UpdateRecipe(id string, recipe *models.Recipe) error
 	DeleteRecipe(id string) error
+	ResolveRecipe(query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error)
 }
 
 // DefaultRecipeService is the default implementation of RecipeServiceInterface.
@@ -50,4 +51,8 @@ func (s *DefaultRecipeService) UpdateRecipe(id string, recipe *models.Recipe) er
 
 func (s *DefaultRecipeService) DeleteRecipe(id string) error {
 	return s.Repo.DeleteRecipe(id)
+}
+
+func (s *DefaultRecipeService) ResolveRecipe(query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error) {
+	return ResolveRecipe(query, attributes)
 }

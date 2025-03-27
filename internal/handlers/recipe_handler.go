@@ -163,3 +163,29 @@ func (h *RecipeHandler) DeleteRecipe(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
+
+// ResolveRecipe handles POST /v1/recipes/resolve
+func (h *RecipeHandler) ResolveRecipe(c *gin.Context) {
+	var payload struct {
+		Query      string                 `json:"query"`
+		Attributes map[string]interface{} `json:"attributes"`
+	}
+
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Call the service-level ResolveRecipe (which is not yet implemented)
+	resolved, similar, err := h.Service.ResolveRecipe(payload.Query, payload.Attributes)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Return the resolved recipe and similar recipes.
+	c.JSON(http.StatusOK, gin.H{
+		"resolved": resolved,
+		"similar":  similar,
+	})
+}

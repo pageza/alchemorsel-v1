@@ -19,8 +19,9 @@ import (
 // Begin: New mock implementation for RecipeServiceInterface
 
 type MockRecipeService struct {
-	GetRecipeFunc  func(id string) (*models.Recipe, error)
-	SaveRecipeFunc func(recipe *models.Recipe) error
+	GetRecipeFunc     func(id string) (*models.Recipe, error)
+	SaveRecipeFunc    func(recipe *models.Recipe) error
+	ResolveRecipeFunc func(query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error)
 }
 
 func (m *MockRecipeService) GetRecipe(id string) (*models.Recipe, error) {
@@ -47,6 +48,13 @@ func (m *MockRecipeService) UpdateRecipe(id string, recipe *models.Recipe) error
 
 func (m *MockRecipeService) DeleteRecipe(id string) error {
 	return errors.New("not implemented")
+}
+
+func (m *MockRecipeService) ResolveRecipe(query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error) {
+	if m.ResolveRecipeFunc != nil {
+		return m.ResolveRecipeFunc(query, attributes)
+	}
+	return nil, nil, errors.New("not implemented")
 }
 
 // End: New mock implementation
@@ -184,3 +192,63 @@ func TestSaveRecipeHandler(t *testing.T) {
 // 	// We could also assert that the response body is empty.
 // 	assert.Empty(t, w.Body.Bytes())
 // }
+
+// TestResolveRecipeHandler verifies that the ResolveRecipe endpoint returns a resolved recipe and similar recipes.
+func TestResolveRecipeHandler(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	// Prepare JSON payload for the request
+	payload := `{"query": "chocolate cake", "attributes": {"approved": true}}`
+	c.Request = httptest.NewRequest("POST", "/v1/recipes/resolve", strings.NewReader(payload))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	// Create a mock service with a ResolveRecipeFunc
+	mockService := &MockRecipeService{
+		ResolveRecipeFunc: func(query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error) {
+			dummyRecipe := &models.Recipe{
+				ID:          "dummy-id",
+				Title:       "Dummy Recipe for " + query,
+				Ingredients: []byte("[]"),
+				Steps:       []byte("[]"),
+			}
+			similar := []*models.Recipe{
+				{
+					ID:          "similar-id",
+					Title:       "Similar Recipe for " + query,
+					Ingredients: []byte("[]"),
+					Steps:       []byte("[]"),
+				},
+			}
+			return dummyRecipe, similar, nil
+		},
+	}
+
+	// Initialize the handler with the mock service
+	handler := handlers.NewRecipeHandler(mockService)
+
+	// Call the ResolveRecipe handler
+	handler.ResolveRecipe(c)
+
+	// Verify the HTTP status code
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Parse the response JSON
+	var resp struct {
+		Resolved *models.Recipe   `json:"resolved"`
+		Similar  []*models.Recipe `json:"similar"`
+	}
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.NoError(t, err)
+
+	// Ensure the resolved recipe is not nil and has the expected title
+	assert.NotNil(t, resp.Resolved)
+	assert.Equal(t, "Dummy Recipe for chocolate cake", resp.Resolved.Title)
+
+	// Check that exactly one similar recipe is returned with the expected title
+	assert.Len(t, resp.Similar, 1)
+	if len(resp.Similar) > 0 {
+		assert.Equal(t, "Similar Recipe for chocolate cake", resp.Similar[0].Title)
+	}
+}
