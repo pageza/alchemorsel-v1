@@ -20,6 +20,73 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// UserServiceInterface defines the methods for user-related business logic.
+type UserServiceInterface interface {
+	Authenticate(ctx context.Context, email string, password string) (*models.User, error)
+	CreateUser(ctx context.Context, user *models.User) error
+	GetUser(ctx context.Context, id string) (*models.User, error)
+	UpdateUser(ctx context.Context, id string, user *models.User) error
+	DeleteUser(ctx context.Context, id string) error
+	GetAllUsers(ctx context.Context) ([]*models.User, error)
+	DeactivateUser(ctx context.Context, id string) error
+	PatchUser(ctx context.Context, id string, patchData map[string]interface{}) error
+	ForgotPassword(ctx context.Context, email string) error
+	ResetPassword(ctx context.Context, token, newPassword string) error
+}
+
+// DefaultUserService is the default implementation of UserServiceInterface.
+type DefaultUserService struct{}
+
+func (s *DefaultUserService) Authenticate(ctx context.Context, email string, password string) (*models.User, error) {
+	user, err := repositories.GetUserByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, fmt.Errorf("invalid credentials")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		return nil, fmt.Errorf("invalid credentials")
+	}
+	return user, nil
+}
+
+func (s *DefaultUserService) CreateUser(ctx context.Context, user *models.User) error {
+	return CreateUser(ctx, user)
+}
+
+func (s *DefaultUserService) GetUser(ctx context.Context, id string) (*models.User, error) {
+	return GetUser(ctx, id)
+}
+
+func (s *DefaultUserService) UpdateUser(ctx context.Context, id string, user *models.User) error {
+	return UpdateUser(ctx, id, user)
+}
+
+func (s *DefaultUserService) DeleteUser(ctx context.Context, id string) error {
+	return DeleteUser(ctx, id)
+}
+
+func (s *DefaultUserService) GetAllUsers(ctx context.Context) ([]*models.User, error) {
+	return GetAllUsers(ctx)
+}
+
+func (s *DefaultUserService) DeactivateUser(ctx context.Context, id string) error {
+	return DeactivateUser(ctx, id)
+}
+
+func (s *DefaultUserService) PatchUser(ctx context.Context, id string, patchData map[string]interface{}) error {
+	return PatchUser(ctx, id, patchData)
+}
+
+func (s *DefaultUserService) ForgotPassword(ctx context.Context, email string) error {
+	return ForgotPassword(ctx, email)
+}
+
+func (s *DefaultUserService) ResetPassword(ctx context.Context, token, newPassword string) error {
+	return ResetPassword(ctx, token, newPassword)
+}
+
 // CreateUser registers a new user.
 // It checks for duplicates, hashes the password, and returns an error if any issue occurs.
 func CreateUser(ctx context.Context, user *models.User) error {

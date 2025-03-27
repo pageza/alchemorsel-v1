@@ -13,20 +13,36 @@ import (
 	"go.uber.org/zap"
 )
 
+// RecipeHandler handles recipe-related HTTP requests with dependency injection.
+type RecipeHandler struct {
+	Service services.RecipeServiceInterface
+}
+
+// NewRecipeHandler creates a new RecipeHandler with the given service.
+func NewRecipeHandler(service services.RecipeServiceInterface) *RecipeHandler {
+	return &RecipeHandler{Service: service}
+}
+
 // ListRecipes handles GET /v1/recipes
-func ListRecipes(c *gin.Context) {
+func (h *RecipeHandler) ListRecipes(c *gin.Context) {
 	// TODO: Retrieve list of recipes, applying any required filtering.
 	c.JSON(http.StatusOK, gin.H{"message": "ListRecipes endpoint - TODO: implement logic"})
 }
 
 // GetRecipe handles GET /v1/recipes/:id
-func GetRecipe(c *gin.Context) {
-	// TODO: Retrieve specific recipe details by ID.
-	c.JSON(http.StatusOK, gin.H{"message": "GetRecipe endpoint - TODO: implement logic"})
+func (h *RecipeHandler) GetRecipe(c *gin.Context) {
+	id := c.Param("id")
+	recipe, err := h.Service.GetRecipe(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Recipe not found"})
+		return
+	}
+	response := dtos.NewRecipeResponse(recipe)
+	c.JSON(http.StatusOK, response)
 }
 
 // SaveRecipe handles POST /v1/recipes
-func SaveRecipe(c *gin.Context) {
+func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 	var req dtos.RecipeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -83,7 +99,7 @@ func SaveRecipe(c *gin.Context) {
 	recipe.Embedding = embedding
 
 	// Save the recipe via the service.
-	if err := services.SaveRecipe(&recipe); err != nil {
+	if err := h.Service.SaveRecipe(&recipe); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -94,13 +110,13 @@ func SaveRecipe(c *gin.Context) {
 }
 
 // UpdateRecipe handles PUT /v1/recipes/:id
-func UpdateRecipe(c *gin.Context) {
+func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
 	// TODO: Parse request and update an existing recipe.
 	c.JSON(http.StatusOK, gin.H{"message": "UpdateRecipe endpoint - TODO: implement logic"})
 }
 
 // DeleteRecipe handles DELETE /v1/recipes/:id
-func DeleteRecipe(c *gin.Context) {
+func (h *RecipeHandler) DeleteRecipe(c *gin.Context) {
 	// TODO: Delete recipe by ID.
 	c.JSON(http.StatusOK, gin.H{"message": "DeleteRecipe endpoint - TODO: implement logic"})
 }

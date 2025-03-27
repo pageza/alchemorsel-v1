@@ -2,19 +2,54 @@ package unit
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pageza/alchemorsel-v1/internal/handlers" // using the existing handler file
+	"github.com/google/uuid"
+	"github.com/pageza/alchemorsel-v1/internal/handlers"
+	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/stretchr/testify/assert"
 )
 
-// These unit tests are written with the intended production behavior in mind.
-// For example, GetRecipe should return a JSON object with an "id" (number) and "title".
-// Right now, the stubs will cause these tests to fail, which is what we want.
+// Begin: New mock implementation for RecipeServiceInterface
+
+type MockRecipeService struct {
+	GetRecipeFunc  func(id string) (*models.Recipe, error)
+	SaveRecipeFunc func(recipe *models.Recipe) error
+}
+
+func (m *MockRecipeService) GetRecipe(id string) (*models.Recipe, error) {
+	if m.GetRecipeFunc != nil {
+		return m.GetRecipeFunc(id)
+	}
+	return nil, errors.New("not implemented")
+}
+
+func (m *MockRecipeService) SaveRecipe(recipe *models.Recipe) error {
+	if m.SaveRecipeFunc != nil {
+		return m.SaveRecipeFunc(recipe)
+	}
+	return nil
+}
+
+func (m *MockRecipeService) ListRecipes() ([]*models.Recipe, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *MockRecipeService) UpdateRecipe(id string, recipe *models.Recipe) error {
+	return errors.New("not implemented")
+}
+
+func (m *MockRecipeService) DeleteRecipe(id string) error {
+	return errors.New("not implemented")
+}
+
+// End: New mock implementation
 
 // TestListRecipesHandler expects the response to contain a "data" field with a slice of recipes.
 // func TestListRecipesHandler(t *testing.T) {
@@ -34,30 +69,48 @@ import (
 // 	// Failing if the "data" key is missing or not an array.
 // }
 
-// TestGetRecipeHandler expects a JSON object with "id" and "title" keys.
-// func TestGetRecipeHandler(t *testing.T) {
-// 	gin.SetMode(gin.TestMode)
-// 	w := httptest.NewRecorder()
-// 	c, _ := gin.CreateTestContext(w)
-// 	c.Params = []gin.Param{{Key: "id", Value: "1"}}
-//
-// 	handlers.GetRecipe(c) // Intended: returns a recipe object (e.g., { "id": 1, "title": "My Recipe", ... })
-//
-// 	assert.Equal(t, http.StatusOK, w.Code)
-//
-// 	var recipe struct {
-// 		ID    float64 `json:"id"`
-// 		Title string  `json:"title"`
-// 	}
-// 	err := json.Unmarshal(w.Body.Bytes(), &recipe)
-// 	assert.NoError(t, err)
-// 	// Also ensure that the ID and Title are present.
-// 	assert.NotZero(t, recipe.ID)
-// 	assert.NotEmpty(t, recipe.Title)
-// }
+// TestGetRecipeHandler expects a JSON object with "id" and "title" keys, and verifies that id is a valid UUID.
+func TestGetRecipeHandler(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	// Using a known valid UUID for testing
+	testID := "123e4567-e89b-12d3-a456-426614174000"
+	c.Params = []gin.Param{{Key: "id", Value: testID}}
 
-// TestSaveRecipeHandler expects that posting valid JSON creates a new recipe
-// and returns the saved recipe with a new numeric ID.
+	// Create a mock service with a GetRecipeFunc
+	mockService := &MockRecipeService{
+		GetRecipeFunc: func(id string) (*models.Recipe, error) {
+			return &models.Recipe{
+				ID:          id,
+				Title:       "My Recipe",
+				Ingredients: []byte("[]"),
+				Steps:       []byte("[]"),
+				CreatedAt:   time.Now(),
+				UpdatedAt:   time.Now(),
+			}, nil
+		},
+	}
+
+	handler := handlers.NewRecipeHandler(mockService)
+	handler.GetRecipe(c) // Call the handler
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var recipe struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+	}
+	err := json.Unmarshal(w.Body.Bytes(), &recipe)
+	assert.NoError(t, err)
+	// Ensure that the ID is not empty and is a valid UUID
+	assert.NotEmpty(t, recipe.ID)
+	_, err = uuid.Parse(recipe.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "My Recipe", recipe.Title)
+}
+
+// TestSaveRecipeHandler expects that posting valid JSON creates a new recipe and returns it with a valid UUID.
 func TestSaveRecipeHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -67,7 +120,18 @@ func TestSaveRecipeHandler(t *testing.T) {
 		strings.NewReader(`{"title": "New Recipe", "ingredients": ["ing1","ing2"], "steps": ["step1","step2"], "approved": true}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	handlers.SaveRecipe(c) // Intended behavior: returns { "data": [<recipe>, ...] } with status 201
+	// Create a mock service with a SaveRecipeFunc that sets the ID if not present
+	mockService := &MockRecipeService{
+		SaveRecipeFunc: func(recipe *models.Recipe) error {
+			if recipe.ID == "" {
+				recipe.ID = uuid.New().String()
+			}
+			return nil
+		},
+	}
+
+	handler := handlers.NewRecipeHandler(mockService)
+	handler.SaveRecipe(c) // Call the handler
 
 	assert.Equal(t, http.StatusCreated, w.Code)
 
@@ -77,7 +141,10 @@ func TestSaveRecipeHandler(t *testing.T) {
 	}
 	err := json.Unmarshal(w.Body.Bytes(), &recipe)
 	assert.NoError(t, err)
+	// Ensure the ID is a valid UUID
 	assert.NotEmpty(t, recipe.ID)
+	_, err = uuid.Parse(recipe.ID)
+	assert.NoError(t, err)
 	assert.Equal(t, "New Recipe", recipe.Title)
 }
 

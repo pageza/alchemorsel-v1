@@ -14,7 +14,18 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/services"
 )
 
-func LoginUser(c *gin.Context) {
+// UserHandler handles user-related HTTP requests with dependency injection.
+type UserHandler struct {
+	Service services.UserServiceInterface
+}
+
+// NewUserHandler creates a new UserHandler with the given service.
+func NewUserHandler(service services.UserServiceInterface) *UserHandler {
+	return &UserHandler{Service: service}
+}
+
+// LoginUser converts LoginUser to a method that uses dependency injection.
+func (h *UserHandler) LoginUser(c *gin.Context) {
 	var input struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -28,7 +39,7 @@ func LoginUser(c *gin.Context) {
 		return
 	}
 
-	user, err := repositories.GetUserByEmail(c.Request.Context(), input.Email)
+	user, err := h.Service.Authenticate(c.Request.Context(), input.Email, input.Password)
 	if err != nil {
 		if err.Error() == "user not found" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid email or password"})
@@ -77,13 +88,17 @@ func getCurrentUserID(c *gin.Context) (string, bool) {
 	return "", false
 }
 
-func GetUser(c *gin.Context) {
-	user, err := repositories.GetUser(c.Request.Context(), c.Param("id"))
+// GetUser converts GetUser to a method that uses dependency injection.
+func (h *UserHandler) GetUser(c *gin.Context) {
+	user, err := h.Service.GetUser(c.Request.Context(), c.Param("id"))
 	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	// Check for nil to return a 404 when the user is not found.
 	if user == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
@@ -91,65 +106,18 @@ func GetUser(c *gin.Context) {
 	c.JSON(http.StatusOK, user)
 }
 
-// PatchCurrentUser allows partial updating of the current user's fields.
-// It returns the updated user as a JSON object.
-func PatchCurrentUser(c *gin.Context) {
-	// Bind JSON payload to a map.
-	var patchData map[string]string
-	if err := c.ShouldBindJSON(&patchData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
-		return
-	}
-
-	// Retrieve the current user ID from context.
-	userID, exists := c.Get("currentUser")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
-
-	// Retrieve the current user record using the repository helper.
-	userPtr, err := repositories.GetUser(c.Request.Context(), userID.(string))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to retrieve user"})
-		return
-	}
-	if userPtr == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-	user := *userPtr
-
-	// Apply patch updates – update name if provided.
-	if newName, ok := patchData["name"]; ok {
-		user.Name = newName
-	}
-
-	// Save the updated user record.
-	if err := repositories.DB.Model(&user).Updates(user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user"})
-		return
-	}
-
-	// Return the updated user record in the response.
-	c.JSON(http.StatusOK, gin.H{"user": user})
-}
-
-// CreateUser creates a new user and handles duplicate registration.
-func CreateUser(c *gin.Context) {
+// CreateUser creates a new user with dependency injection.
+func (h *UserHandler) CreateUser(c *gin.Context) {
 	var user models.User
 	if err := c.ShouldBindJSON(&user); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	// Validate required fields.
 	if strings.TrimSpace(user.Name) == "" || strings.TrimSpace(user.Email) == "" || strings.TrimSpace(user.Password) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name, email, and password are required"})
 		return
 	}
-	err := services.CreateUser(c.Request.Context(), &user)
-	if err != nil {
-		// Check for duplicate registration using a UNIQUE constraint error.
+	if err := h.Service.CreateUser(c.Request.Context(), &user); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			c.JSON(http.StatusConflict, gin.H{"error": "user already exists"})
 			return
@@ -160,19 +128,19 @@ func CreateUser(c *gin.Context) {
 	c.JSON(http.StatusCreated, user)
 }
 
-// NEW: VerifyEmail handles email verification via a token.
-func VerifyEmail(c *gin.Context) {
+// VerifyEmail handles email verification via a token using dependency injection.
+func (h *UserHandler) VerifyEmail(c *gin.Context) {
 	token := c.Param("token")
 	if token == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing token"})
 		return
 	}
-	// TODO: Add real verification logic (e.g., lookup by token, mark email verified).
+	// TODO: Add real verification logic if necessary.
 	c.JSON(http.StatusOK, gin.H{"message": "email verified successfully"})
 }
 
-// NEW: ForgotPassword initiates the forgot password flow.
-func ForgotPassword(c *gin.Context) {
+// ForgotPassword initiates the forgot password flow with dependency injection.
+func (h *UserHandler) ForgotPassword(c *gin.Context) {
 	var input struct {
 		Email string `json:"email"`
 	}
@@ -180,12 +148,15 @@ func ForgotPassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	// TODO: Add password reset token generation and email sending.
+	if err := h.Service.ForgotPassword(c.Request.Context(), input.Email); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "reset password instructions sent"})
 }
 
-// NEW: ResetPassword handles password reset using a token and a new password.
-func ResetPassword(c *gin.Context) {
+// ResetPassword handles password reset using a token and a new password with dependency injection.
+func (h *UserHandler) ResetPassword(c *gin.Context) {
 	var input struct {
 		Token       string `json:"token"`
 		NewPassword string `json:"new_password"`
@@ -198,7 +169,10 @@ func ResetPassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing token or new password"})
 		return
 	}
-	// TODO: Verify the token and update the user's password.
+	if err := h.Service.ResetPassword(c.Request.Context(), input.Token, input.NewPassword); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "password reset successfully"})
 }
 
@@ -269,4 +243,90 @@ func GetAllUsers(c *gin.Context) {
 // NEW: HealthCheck provides a basic health check response.
 func HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "OK"})
+}
+
+// GetCurrentUser retrieves the current user using the authenticated context.
+func (h *UserHandler) GetCurrentUser(c *gin.Context) {
+	userID, ok := getCurrentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	user, err := h.Service.GetUser(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	c.JSON(http.StatusOK, user)
+}
+
+// UpdateCurrentUser updates the current user's information.
+func (h *UserHandler) UpdateCurrentUser(c *gin.Context) {
+	var user models.User
+	if err := c.ShouldBindJSON(&user); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	userID, ok := getCurrentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	if err := h.Service.UpdateUser(c.Request.Context(), userID, &user); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, user)
+}
+
+// PatchCurrentUser applies partial updates to the current user.
+func (h *UserHandler) PatchCurrentUser(c *gin.Context) {
+	var patchData map[string]interface{}
+	if err := c.ShouldBindJSON(&patchData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+	userID, ok := getCurrentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	if err := h.Service.PatchUser(c.Request.Context(), userID, patchData); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update user: " + err.Error()})
+		return
+	}
+	user, err := h.Service.GetUser(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"user": user})
+}
+
+// DeleteCurrentUser deactivates the current user.
+func (h *UserHandler) DeleteCurrentUser(c *gin.Context) {
+	userID, ok := getCurrentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	if err := h.Service.DeleteUser(c.Request.Context(), userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "user deleted successfully"})
+}
+
+// GetAllUsers returns a list of all users.
+func (h *UserHandler) GetAllUsers(c *gin.Context) {
+	users, err := h.Service.GetAllUsers(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"users": users})
 }

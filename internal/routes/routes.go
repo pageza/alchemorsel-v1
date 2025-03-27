@@ -8,6 +8,7 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/middleware"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
+	"github.com/pageza/alchemorsel-v1/internal/services"
 
 	"strings"
 
@@ -58,21 +59,28 @@ func SetupRouter() *gin.Engine {
 	// Grouping versioned API routes
 	v1 := router.Group("/v1")
 	{
-		// Public user endpoints for registration and login.
-		v1.POST("/users", handlers.CreateUser)
-		v1.POST("/users/login", middleware.LoginRateLimiter(), handlers.LoginUser)
-		v1.GET("/users/verify-email/:token", handlers.VerifyEmail)
-		v1.POST("/users/forgot-password", handlers.ForgotPassword)
-		v1.POST("/users/reset-password", handlers.ResetPassword)
-		v1.GET("/users/:id", handlers.GetUser)
-		// (Optional) In the future, we might add public endpoints for user lookup with proper measures.
+		// Initialize RecipeHandler with injected RecipeRepository dependency
+		recipeService := &services.DefaultRecipeService{Repo: &repositories.DefaultRecipeRepository{}}
+		recipeHandler := handlers.NewRecipeHandler(recipeService)
+
+		// Initialize UserHandler with dependency-injected service
+		userService := &services.DefaultUserService{}
+		userHandler := handlers.NewUserHandler(userService)
+
+		// Public user endpoints for registration, login and account management
+		v1.POST("/users", userHandler.CreateUser)
+		v1.POST("/users/login", middleware.LoginRateLimiter(), userHandler.LoginUser)
+		v1.GET("/users/verify-email/:token", userHandler.VerifyEmail)
+		v1.POST("/users/forgot-password", userHandler.ForgotPassword)
+		v1.POST("/users/reset-password", userHandler.ResetPassword)
+		v1.GET("/users/:id", userHandler.GetUser)
 
 		// Recipe endpoints
-		v1.GET("/recipes", handlers.ListRecipes)
-		v1.GET("/recipes/:id", handlers.GetRecipe)
-		v1.POST("/recipes", handlers.SaveRecipe)
-		v1.PUT("/recipes/:id", handlers.UpdateRecipe)
-		v1.DELETE("/recipes/:id", handlers.DeleteRecipe)
+		v1.GET("/recipes", recipeHandler.ListRecipes)
+		v1.GET("/recipes/:id", recipeHandler.GetRecipe)
+		v1.POST("/recipes", recipeHandler.SaveRecipe)
+		v1.PUT("/recipes/:id", recipeHandler.UpdateRecipe)
+		v1.DELETE("/recipes/:id", recipeHandler.DeleteRecipe)
 
 		// Recipe resolution endpoint
 		v1.POST("/recipes/resolve", handlers.ResolveRecipe)
@@ -81,20 +89,11 @@ func SetupRouter() *gin.Engine {
 		secured := v1.Group("")
 		secured.Use(middleware.AuthMiddleware())
 		{
-			// Regular endpoint: current user's profile.
-			secured.GET("/users/me", handlers.GetCurrentUser)
-
-			// Endpoint for updating current user's information.
-			secured.PUT("/users/me", handlers.UpdateCurrentUser)
-
-			// NEW: Add PATCH endpoint to update current user partially.
-			secured.PATCH("/users/me", handlers.PatchCurrentUser)
-
-			// Endpoint for deactivating (soft deleting) current user.
-			secured.DELETE("/users/me", handlers.DeleteCurrentUser)
-
-			// Admin-only endpoint: list users (or search/filter users).
-			secured.GET("/admin/users", handlers.GetAllUsers)
+			secured.GET("/users/me", userHandler.GetCurrentUser)
+			secured.PUT("/users/me", userHandler.UpdateCurrentUser)
+			secured.PATCH("/users/me", userHandler.PatchCurrentUser)
+			secured.DELETE("/users/me", userHandler.DeleteCurrentUser)
+			secured.GET("/admin/users", userHandler.GetAllUsers)
 		}
 
 		// Health-check endpoint to support TestHealthCheck.

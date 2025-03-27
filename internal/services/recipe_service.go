@@ -1,7 +1,6 @@
 package services
 
 import (
-	"errors"
 	"time"
 
 	"github.com/pageza/alchemorsel-v1/internal/models"
@@ -9,20 +8,26 @@ import (
 	"go.uber.org/zap"
 )
 
-// ListRecipes retrieves a list of recipes.
-func ListRecipes() ([]*models.Recipe, error) {
-	// TODO: Implement logic to list or search recipes.
-	return nil, errors.New("not implemented")
+// RecipeServiceInterface defines the methods for recipe-related business logic.
+type RecipeServiceInterface interface {
+	GetRecipe(id string) (*models.Recipe, error)
+	SaveRecipe(recipe *models.Recipe) error
+	ListRecipes() ([]*models.Recipe, error)
+	UpdateRecipe(id string, recipe *models.Recipe) error
+	DeleteRecipe(id string) error
 }
 
-// GetRecipe retrieves a recipe by ID.
-func GetRecipe(id string) (*models.Recipe, error) {
-	// TODO: Implement logic to retrieve a specific recipe.
-	return nil, errors.New("not implemented")
+// DefaultRecipeService is the default implementation of RecipeServiceInterface.
+// It delegates calls to the repositories layer and adds business logic where necessary.
+type DefaultRecipeService struct {
+	Repo repositories.RecipeRepository
 }
 
-// SaveRecipe saves a new recipe into the database.
-func SaveRecipe(recipe *models.Recipe) error {
+func (s *DefaultRecipeService) GetRecipe(id string) (*models.Recipe, error) {
+	return s.Repo.GetRecipe(id)
+}
+
+func (s *DefaultRecipeService) SaveRecipe(recipe *models.Recipe) error {
 	now := time.Now()
 	if recipe.CreatedAt.IsZero() {
 		recipe.CreatedAt = now
@@ -32,19 +37,17 @@ func SaveRecipe(recipe *models.Recipe) error {
 	// Log the database save operation for monitoring.
 	zap.S().Infow("Saving recipe to the database", "title", recipe.Title)
 
-	// TODO: Consider adding transaction management and enhanced error monitoring.
-	// Insert recipe into the database via the repository.
-	return repositories.SaveRecipe(recipe)
+	return s.Repo.SaveRecipe(recipe)
 }
 
-// UpdateRecipe updates an existing recipe.
-func UpdateRecipe(id string, recipe *models.Recipe) error {
-	// TODO: Implement logic to update a recipe.
-	return errors.New("not implemented")
+func (s *DefaultRecipeService) ListRecipes() ([]*models.Recipe, error) {
+	return s.Repo.ListRecipes()
 }
 
-// DeleteRecipe deletes a recipe by ID.
-func DeleteRecipe(id string) error {
-	// TODO: Implement logic to delete a recipe.
-	return errors.New("not implemented")
+func (s *DefaultRecipeService) UpdateRecipe(id string, recipe *models.Recipe) error {
+	return s.Repo.UpdateRecipe(id, recipe)
+}
+
+func (s *DefaultRecipeService) DeleteRecipe(id string) error {
+	return s.Repo.DeleteRecipe(id)
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/pageza/alchemorsel-v1/internal/routes" // using the existing routes configuration
 	"github.com/stretchr/testify/assert"
 )
@@ -45,12 +46,11 @@ func TestIntegrationListRecipes(t *testing.T) {
 */
 
 // TestIntegrationGetRecipe creates a recipe then retrieves it by ID.
-/*
 func TestIntegrationGetRecipe(t *testing.T) {
 	router := routes.SetupRouter()
 
 	// Create a recipe
-	postBody := `{"title": "Integration Test Recipe Get", "ingredients": ["ing"], "steps": ["s"]}`
+	postBody := `{"title": "Integration Test Recipe Get", "ingredients": ["ing"], "steps": ["s"], "approved": true}`
 	createReq, _ := http.NewRequest("POST", "/v1/recipes", strings.NewReader(postBody))
 	createReq.Header.Set("Content-Type", "application/json")
 	createResp := httptest.NewRecorder()
@@ -58,30 +58,38 @@ func TestIntegrationGetRecipe(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, createResp.Code)
 
 	var created struct {
-		ID    float64 `json:"id"`
-		Title string  `json:"title"`
+		ID    string `json:"id"`
+		Title string `json:"title"`
 	}
 	err := json.Unmarshal(createResp.Body.Bytes(), &created)
 	assert.NoError(t, err)
-	assert.NotZero(t, created.ID)
+	assert.NotEmpty(t, created.ID)
+
+	// Verify that created.ID is a valid UUID
+	_, err = uuid.Parse(created.ID)
+	assert.NoError(t, err, "created.ID should be a valid UUID")
 
 	// Retrieve the created recipe
-	getURL := fmt.Sprintf("/v1/recipes/%v", created.ID)
+	getURL := "/v1/recipes/" + strings.TrimSpace(created.ID)
 	req, _ := http.NewRequest("GET", getURL, nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var recipe struct {
-		ID    float64 `json:"id"`
-		Title string  `json:"title"`
+		ID    string `json:"id"`
+		Title string `json:"title"`
 	}
 	err = json.Unmarshal(w.Body.Bytes(), &recipe)
 	assert.NoError(t, err)
 	assert.Equal(t, created.ID, recipe.ID)
+
+	// Verify that the retrieved recipe's ID is a valid UUID
+	_, err = uuid.Parse(recipe.ID)
+	assert.NoError(t, err, "retrieved recipe.ID should be a valid UUID")
+
 	assert.Equal(t, created.Title, recipe.Title)
 }
-*/
 
 // TestIntegrationSaveRecipe expects the POST endpoint to return a saved recipe with a valid ID.
 func TestIntegrationSaveRecipe(t *testing.T) {
@@ -118,7 +126,7 @@ func TestIntegrationUpdateRecipe(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, createResp.Code)
 
 	var created struct {
-		ID    float64 `json:"id"`
+		ID    string `json:"id"`
 		Title string  `json:"title"`
 	}
 	err := json.Unmarshal(createResp.Body.Bytes(), &created)
@@ -126,7 +134,7 @@ func TestIntegrationUpdateRecipe(t *testing.T) {
 
 	// Now update the recipe
 	updateBody := `{"title": "Updated Recipe Title", "ingredients": ["ing1", "ing2"], "steps": ["step1", "step2"]}`
-	updateURL := fmt.Sprintf("/v1/recipes/%v", created.ID)
+	updateURL := "/v1/recipes/" + created.ID
 	updateReq, _ := http.NewRequest("PUT", updateURL, strings.NewReader(updateBody))
 	updateReq.Header.Set("Content-Type", "application/json")
 	updateResp := httptest.NewRecorder()
@@ -134,7 +142,7 @@ func TestIntegrationUpdateRecipe(t *testing.T) {
 	assert.Equal(t, http.StatusOK, updateResp.Code)
 
 	var updatedRecipe struct {
-		ID    float64 `json:"id"`
+		ID    string `json:"id"`
 		Title string  `json:"title"`
 	}
 	err = json.Unmarshal(updateResp.Body.Bytes(), &updatedRecipe)
@@ -157,14 +165,14 @@ func TestIntegrationUpdateRecipe(t *testing.T) {
 // 	assert.Equal(t, http.StatusCreated, createResp.Code)
 
 // 	var created struct {
-// 		ID    float64 `json:"id"`
+// 		ID    string `json:"id"`
 // 		Title string  `json:"title"`
 // 	}
 // 	err := json.Unmarshal(createResp.Body.Bytes(), &created)
 // 	assert.NoError(t, err)
 
 // 	// Delete the recipe
-// 	deleteURL := fmt.Sprintf("/v1/recipes/%v", created.ID)
+// 	deleteURL := "/v1/recipes/" + created.ID
 // 	req, _ := http.NewRequest("DELETE", deleteURL, nil)
 // 	w := httptest.NewRecorder()
 // 	router.ServeHTTP(w, req)
