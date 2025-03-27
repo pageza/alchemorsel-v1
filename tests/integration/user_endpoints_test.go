@@ -16,6 +16,7 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
+	"gorm.io/gorm"
 )
 
 var integrationTestMutex sync.Mutex // Added to serialize tests that modify the DB.
@@ -73,11 +74,11 @@ var integrationTestMutex sync.Mutex // Added to serialize tests that modify the 
 // }
 
 // resetDB resets the database state before each subtest.
-func resetDB(t *testing.T) {
+func resetDB(t *testing.T, database *gorm.DB) {
 	integrationTestMutex.Lock()         // Lock to ensure sequential DB modifications.
 	defer integrationTestMutex.Unlock() // Release after reset.
 
-	if err := repositories.ClearUsers(); err != nil {
+	if err := database.Exec("DELETE FROM users").Error; err != nil {
 		t.Fatalf("failed to clear users table: %v", err)
 	}
 	// Re-insert dummy user required for certain endpoints.
@@ -87,7 +88,7 @@ func resetDB(t *testing.T) {
 		Email:    "dummy@example.com",
 		Password: "dummy",
 	}
-	if err := repositories.DB.FirstOrCreate(&dummyUser, models.User{ID: "1"}).Error; err != nil {
+	if err := database.FirstOrCreate(&dummyUser, models.User{ID: "1"}).Error; err != nil {
 		t.Fatalf("failed to insert dummy user: %v", err)
 	}
 }
@@ -111,7 +112,12 @@ func TestIntegrationUser(t *testing.T) {
 	// ... rest of test
 }
 
-func TestUserEndpoints(t *testing.T) {
+func setupTestDB(t *testing.T) (*gin.Engine, *gorm.DB) {
+	// Set environment variables for test
+	os.Setenv("DB_DRIVER", "postgres")
+	os.Setenv("TEST_MODE", "true")
+	os.Setenv("DISABLE_RATE_LIMITER", "true")
+
 	// Initialize the database
 	config := db.NewConfig()
 	database, err := db.InitDB(config)
@@ -119,40 +125,35 @@ func TestUserEndpoints(t *testing.T) {
 		t.Fatalf("Failed to initialize DB: %v", err)
 	}
 
-	// Force tests to disable the rate limiter.
-	os.Setenv("DISABLE_RATE_LIMITER", "true")
-	// Set Gin to test mode.
+	// Run migrations
+	if err := repositories.RunMigrations(database); err != nil {
+		t.Fatalf("Failed to run migrations: %v", err)
+	}
+
+	// Set Gin to test mode
 	gin.SetMode(gin.TestMode)
+
 	// Initialize the router with the database
-	router := routes.SetupRouter(database)
+	return routes.SetupRouter(database), database
+}
+
+func TestUserEndpoints(t *testing.T) {
+	router, database := setupTestDB(t)
 
 	t.Run("CreateUser_Success", func(t *testing.T) {
-		resetDB(t)
-		// Prepare and send POST /v1/users with a unique, freshly generated email.
-		newUser := map[string]string{
-			"name":     "Test User",
-			"email":    "testuser+" + generateRandomSuffix() + "@example.com",
-			"password": "Password1!",
+		resetDB(t, database)
+		// Test user creation
+		req, _ := http.NewRequest("POST", "/v1/users", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusCreated {
+			t.Errorf("Expected status 201, got %d", resp.Code)
 		}
-		payload, err := json.Marshal(newUser)
-		if err != nil {
-			t.Fatalf("failed to marshal new user payload: %v", err)
-		}
-		req, err := http.NewRequest("POST", "/v1/users", bytes.NewBuffer(payload))
-		if err != nil {
-			t.Fatalf("failed to create request: %v", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-		if w.Code != http.StatusCreated {
-			t.Errorf("expected status 201, got %d", w.Code)
-		}
-		// ... further assertions as needed ...
 	})
 
 	t.Run("LoginUser_JWTTokenVerification", func(t *testing.T) {
-		resetDB(t)
+		resetDB(t, database)
 		// Prepare a new user payload with a unique email.
 		newUser := map[string]string{
 			"name":     "Test User",
@@ -187,11 +188,10 @@ func TestUserEndpoints(t *testing.T) {
 		if resp.Code != http.StatusOK {
 			t.Fatalf("expected status %d for login, got %d", http.StatusOK, resp.Code)
 		}
-		// ... token verification code remains unchanged ...
 	})
 
 	t.Run("LoginUser_NoJWTSecret", func(t *testing.T) {
-		resetDB(t)
+		resetDB(t, database)
 		originalSecret := os.Getenv("JWT_SECRET")
 		os.Setenv("JWT_SECRET", "")
 		defer os.Setenv("JWT_SECRET", originalSecret)
@@ -232,7 +232,7 @@ func TestUserEndpoints(t *testing.T) {
 	})
 
 	t.Run("GetUser_NotFound", func(t *testing.T) {
-		resetDB(t)
+		resetDB(t, database)
 		req, err := http.NewRequest("GET", "/v1/users/nonexistent-id", nil)
 		if err != nil {
 			t.Fatalf("failed to create GET request: %v", err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -15,6 +16,14 @@ import (
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
+
+	// Create a temporary directory for test files
+	tmpDir, err := os.MkdirTemp("", "alchemorsel-integration-test-*")
+	if err != nil {
+		fmt.Printf("Failed to create temp directory: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.RemoveAll(tmpDir)
 
 	req := testcontainers.ContainerRequest{
 		Image:        "postgres:13", // Use a stable Postgres version matching production
@@ -53,9 +62,16 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	// Create a temporary file for the DSN
+	dsnFile := filepath.Join(tmpDir, "testdb.dsn")
+	dsn := fmt.Sprintf("host=%s port=%s user=postgres password=testpass dbname=testdb sslmode=disable options='-c search_path=public,pg_catalog'", host, mappedPort.Port())
+	if err := os.WriteFile(dsnFile, []byte(dsn), 0644); err != nil {
+		fmt.Printf("Failed to write DSN file: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Set environment variables so that the application uses the ephemeral Postgres instance.
 	os.Setenv("DB_DRIVER", "postgres")
-	dsn := fmt.Sprintf("host=%s port=%s user=postgres password=testpass dbname=testdb sslmode=disable options='-c search_path=public,pg_catalog'", host, mappedPort.Port())
 	os.Setenv("DB_SOURCE", dsn)
 
 	// Also set the individual Postgres environment variables required by other parts of the code.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/services"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -24,6 +26,14 @@ import (
 // TestMain sets up a PostgreSQL container for unit tests.
 func TestMain(m *testing.M) {
 	ctx := context.Background()
+
+	// Create a temporary directory for test files
+	tmpDir, err := os.MkdirTemp("", "alchemorsel-test-*")
+	if err != nil {
+		fmt.Printf("Failed to create temp directory: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.RemoveAll(tmpDir)
 
 	req := testcontainers.ContainerRequest{
 		Image:        "postgres:13", // Use a stable Postgres version matching production
@@ -61,7 +71,13 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	// Create a temporary file for the DSN
+	dsnFile := filepath.Join(tmpDir, "testdb.dsn")
 	dsn := fmt.Sprintf("host=%s port=%s user=postgres password=testpass dbname=testdb sslmode=disable options='-c search_path=public,pg_catalog'", host, mappedPort.Port())
+	if err := os.WriteFile(dsnFile, []byte(dsn), 0644); err != nil {
+		fmt.Printf("Failed to write DSN file: %v\n", err)
+		os.Exit(1)
+	}
 
 	db.DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
@@ -89,32 +105,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestCreateUser(t *testing.T) {
-	ctx := context.Background()
-	user := &models.User{
-		Name:  "Test User",
-		Email: "test@example.com",
-		// Updated password: at least 8 characters with one digit, one uppercase, one lowercase, and one special character.
-		Password: "Test1234!",
-	}
-
-	mockRepo := new(MockUserRepository)
-	service := services.NewUserService(mockRepo)
-
-	mockRepo.On("GetUserByEmail", ctx, user.Email).Return(nil, nil)
-	mockRepo.On("CreateUser", ctx, mock.AnythingOfType("*models.User")).Return(nil)
-
-	err := service.CreateUser(ctx, user)
-	if err != nil {
-		t.Fatalf("User creation failed: %v", err)
-	}
-	// Verify that the plain text password is replaced with a hashed one.
-	if user.Password == "Test1234!" {
-		t.Errorf("Expected password to be hashed, but it remains in plain text")
-	}
-}
-
-// Replace db.DB usage with mock repositories
+// MockUserRepository implements the UserRepository interface for testing
 type MockUserRepository struct {
 	mock.Mock
 }
@@ -164,6 +155,183 @@ func (m *MockUserRepository) GetUserByResetPasswordToken(ctx context.Context, to
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func TestCreateUser(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := new(MockUserRepository)
+	service := services.NewUserService(mockRepo)
+
+	tests := []struct {
+		name    string
+		user    *models.User
+		wantErr bool
+		setup   func()
+	}{
+		{
+			name: "successful user creation",
+			user: &models.User{
+				Name:     "Test User",
+				Email:    "test@example.com",
+				Password: "Test1234!",
+			},
+			wantErr: false,
+			setup: func() {
+				mockRepo.On("GetUserByEmail", ctx, "test@example.com").Return(nil, nil)
+				mockRepo.On("CreateUser", ctx, mock.AnythingOfType("*models.User")).Return(nil)
+			},
+		},
+		{
+			name: "duplicate email",
+			user: &models.User{
+				Name:     "Test User",
+				Email:    "existing@example.com",
+				Password: "Test1234!",
+			},
+			wantErr: true,
+			setup: func() {
+				mockRepo.On("GetUserByEmail", ctx, "existing@example.com").Return(&models.User{}, nil)
+			},
+		},
+		{
+			name: "invalid password",
+			user: &models.User{
+				Name:     "Test User",
+				Email:    "test@example.com",
+				Password: "weak",
+			},
+			wantErr: true,
+			setup:   func() {},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo.ExpectedCalls = nil
+			mockRepo.Calls = nil
+			tt.setup()
+
+			err := service.CreateUser(ctx, tt.user)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotEqual(t, "Test1234!", tt.user.Password, "Password should be hashed")
+			}
+		})
+	}
+}
+
+func TestGetUser(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := new(MockUserRepository)
+	service := services.NewUserService(mockRepo)
+
+	expectedUser := &models.User{
+		ID:    "123",
+		Name:  "Test User",
+		Email: "test@example.com",
+	}
+
+	mockRepo.On("GetUser", ctx, "123").Return(expectedUser, nil)
+	mockRepo.On("GetUser", ctx, "456").Return(nil, fmt.Errorf("user not found"))
+
+	t.Run("successful get user", func(t *testing.T) {
+		user, err := service.GetUser(ctx, "123")
+		assert.NoError(t, err)
+		assert.Equal(t, expectedUser, user)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		user, err := service.GetUser(ctx, "456")
+		assert.Error(t, err)
+		assert.Nil(t, user)
+		assert.Equal(t, "user not found", err.Error())
+	})
+}
+
+func TestUpdateUser(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := new(MockUserRepository)
+	service := services.NewUserService(mockRepo)
+
+	user := &models.User{
+		ID:       "123",
+		Name:     "Updated Name",
+		Email:    "updated@example.com",
+		Password: "Test1234!",
+	}
+
+	mockRepo.On("UpdateUser", ctx, user).Return(nil)
+	mockRepo.On("GetUserByEmail", ctx, "updated@example.com").Return(nil, nil)
+
+	err := service.UpdateUser(ctx, "123", user)
+	assert.NoError(t, err)
+}
+
+func TestDeleteUser(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := new(MockUserRepository)
+	service := services.NewUserService(mockRepo)
+
+	mockRepo.On("DeleteUser", ctx, "123").Return(nil)
+	mockRepo.On("DeleteUser", ctx, "456").Return(fmt.Errorf("user not found"))
+
+	t.Run("successful delete", func(t *testing.T) {
+		err := service.DeleteUser(ctx, "123")
+		assert.NoError(t, err)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		err := service.DeleteUser(ctx, "456")
+		assert.Error(t, err)
+		assert.Equal(t, "user not found", err.Error())
+	})
+}
+
+func TestGetAllUsers(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := new(MockUserRepository)
+	service := services.NewUserService(mockRepo)
+
+	expectedUsers := []*models.User{
+		{ID: "1", Name: "User 1", Email: "user1@example.com"},
+		{ID: "2", Name: "User 2", Email: "user2@example.com"},
+	}
+
+	mockRepo.On("GetAllUsers", ctx).Return(expectedUsers, nil)
+
+	users, err := service.GetAllUsers(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedUsers, users)
+}
+
+func TestResetPassword(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := new(MockUserRepository)
+	service := services.NewUserService(mockRepo)
+
+	expiry := time.Now().Add(24 * time.Hour)
+	user := &models.User{
+		ID:                   "123",
+		ResetPasswordToken:   "valid-token",
+		ResetPasswordExpires: &expiry,
+	}
+
+	mockRepo.On("GetUserByResetPasswordToken", ctx, "valid-token").Return(user, nil)
+	mockRepo.On("UpdateUser", ctx, mock.AnythingOfType("*models.User")).Return(nil)
+	mockRepo.On("GetUserByResetPasswordToken", ctx, "invalid-token").Return(nil, nil)
+
+	t.Run("successful password reset", func(t *testing.T) {
+		err := service.ResetPassword(ctx, "valid-token", "NewPassword123!")
+		assert.NoError(t, err)
+	})
+
+	t.Run("invalid token", func(t *testing.T) {
+		err := service.ResetPassword(ctx, "invalid-token", "NewPassword123!")
+		assert.Error(t, err)
+		assert.Equal(t, "invalid or expired reset token", err.Error())
+	})
 }
 
 func TestUserService(t *testing.T) {

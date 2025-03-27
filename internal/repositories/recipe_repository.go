@@ -2,10 +2,10 @@ package repositories
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"time"
-
-	"errors"
 
 	"github.com/google/uuid"
 	"github.com/pageza/alchemorsel-v1/internal/models"
@@ -13,40 +13,110 @@ import (
 	"gorm.io/gorm"
 )
 
+// RecipeError represents a domain-specific error for recipe operations
+type RecipeError struct {
+	Code    int
+	Message string
+	Err     error
+}
+
+func (e *RecipeError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("recipe error: %s (code: %d): %v", e.Message, e.Code, e.Err)
+	}
+	return fmt.Sprintf("recipe error: %s (code: %d)", e.Message, e.Code)
+}
+
+var (
+	ErrRecipeNotFound = &RecipeError{Code: 404, Message: "recipe not found"}
+	ErrInvalidRecipe  = &RecipeError{Code: 400, Message: "invalid recipe data"}
+	ErrDBOperation    = &RecipeError{Code: 500, Message: "database operation failed"}
+)
+
 var testRecipes = make(map[string]*models.Recipe)
 
 // ListRecipes retrieves a list of recipes from the database.
 func ListRecipes() ([]*models.Recipe, error) {
+	logger := logrus.WithField("operation", "ListRecipes")
+	logger.Info("retrieving recipes")
+
 	if os.Getenv("TEST_MODE") != "" || DB == nil {
 		var recipes []*models.Recipe
 		for _, r := range testRecipes {
 			recipes = append(recipes, r)
 		}
+		logger.WithField("count", len(recipes)).Info("retrieved recipes from test store")
 		return recipes, nil
 	}
-	// TODO: Implement database operation to list recipes.
-	return nil, nil
+
+	var recipes []*models.Recipe
+	if err := DB.Find(&recipes).Error; err != nil {
+		logger.WithError(err).Error("failed to retrieve recipes from database")
+		return nil, &RecipeError{Code: 500, Message: "failed to retrieve recipes", Err: err}
+	}
+
+	logger.WithField("count", len(recipes)).Info("retrieved recipes from database")
+	return recipes, nil
 }
 
 // GetRecipe retrieves a recipe by ID.
 func GetRecipe(id string) (*models.Recipe, error) {
+	logger := logrus.WithFields(logrus.Fields{
+		"operation": "GetRecipe",
+		"recipe_id": id,
+	})
+	logger.Info("retrieving recipe")
+
+	if id == "" {
+		logger.Error("empty recipe ID provided")
+		return nil, &RecipeError{Code: 400, Message: "recipe ID is required"}
+	}
+
 	if os.Getenv("TEST_MODE") != "" || DB == nil {
 		if recipe, ok := testRecipes[id]; ok {
+			logger.Info("retrieved recipe from test store")
 			return recipe, nil
 		}
-		return nil, errors.New("recipe not found")
+		logger.Error("recipe not found in test store")
+		return nil, ErrRecipeNotFound
 	}
+
 	var recipe models.Recipe
 	if err := DB.First(&recipe, "id = ?", id).Error; err != nil {
-		return nil, err
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.Error("recipe not found in database")
+			return nil, ErrRecipeNotFound
+		}
+		logger.WithError(err).Error("failed to retrieve recipe from database")
+		return nil, &RecipeError{Code: 500, Message: "failed to retrieve recipe", Err: err}
 	}
+
+	logger.Info("retrieved recipe from database")
 	return &recipe, nil
 }
 
 // SaveRecipe inserts a new recipe into the database.
 func SaveRecipe(recipe *models.Recipe) error {
+	if recipe == nil {
+		return &RecipeError{Code: 400, Message: "recipe cannot be nil"}
+	}
+
+	logger := logrus.WithFields(logrus.Fields{
+		"operation": "SaveRecipe",
+		"recipe_id": recipe.ID,
+		"title":     recipe.Title,
+	})
+	logger.Info("saving recipe")
+
+	// Validate required fields
+	if recipe.Title == "" {
+		logger.Error("recipe title is required")
+		return &RecipeError{Code: 400, Message: "recipe title is required"}
+	}
+
 	if recipe.ID == "" {
 		recipe.ID = uuid.New().String()
+		logger.WithField("new_id", recipe.ID).Info("generated new recipe ID")
 	}
 
 	// Set timestamps if not already set
@@ -63,19 +133,24 @@ func SaveRecipe(recipe *models.Recipe) error {
 		recipe.Steps = []byte("[]")
 	}
 
-	// Log the save operation.
-	logrus.WithFields(logrus.Fields{"recipeID": recipe.ID, "recipeTitle": recipe.Title}).Info("Global SaveRecipe called")
-
-	// Use in-memory store for tests.
+	// Use in-memory store for tests
 	if os.Getenv("TEST_MODE") == "true" {
 		testRecipes[recipe.ID] = recipe
+		logger.Info("saved recipe to test store")
 		return nil
 	}
 
-	if err := DB.Create(recipe).Error; err != nil {
-		return err
-	}
-	return nil
+	// Use transaction for database operations
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(recipe).Error; err != nil {
+			logger.WithError(err).Error("failed to save recipe to database")
+			return &RecipeError{Code: 500, Message: "failed to save recipe", Err: err}
+		}
+		logger.Info("saved recipe to database")
+		return nil
+	})
+
+	return err
 }
 
 // UpdateRecipe modifies an existing recipe in the database.

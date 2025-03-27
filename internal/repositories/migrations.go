@@ -65,11 +65,15 @@ func AutoMigrate() error {
 	if err != nil {
 		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
 	}
-	if _, err := sqlDB.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
-		return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
+
+	// Only create UUID extension for PostgreSQL
+	if os.Getenv("DB_DRIVER") == "postgres" {
+		if _, err := sqlDB.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
+			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
+		}
 	}
 
-	return DB.AutoMigrate(
+	return DB.WithContext(context.Background()).AutoMigrate(
 		&models.User{},
 		&models.Recipe{},
 		&models.Tag{},
@@ -80,10 +84,30 @@ func AutoMigrate() error {
 // ClearUsers removes all data from the users table.
 // This helper is used for test and integration setup.
 func ClearUsers() error {
+	if DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
 	return DB.Exec("DELETE FROM users").Error
 }
 
 func RunMigrations(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	// Use the underlying sql.DB to execute the extension creation outside any transaction.
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
+	}
+
+	// Only create UUID extension for PostgreSQL
+	if os.Getenv("DB_DRIVER") == "postgres" {
+		if _, err := sqlDB.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
+			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
+		}
+	}
+
 	return db.AutoMigrate(
 		&models.User{},
 		&models.Recipe{},

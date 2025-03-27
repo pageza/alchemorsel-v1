@@ -23,7 +23,14 @@ func NewRecipeHandler(service services.RecipeServiceInterface) *RecipeHandler {
 	return &RecipeHandler{Service: service}
 }
 
-// ListRecipes handles GET /v1/recipes
+// @Summary List all recipes
+// @Description Get a list of all recipes
+// @Tags recipes
+// @Accept json
+// @Produce json
+// @Success 200 {array} models.Recipe
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/recipes [get]
 func (h *RecipeHandler) ListRecipes(c *gin.Context) {
 	recipes, err := h.Service.ListRecipes(c.Request.Context())
 	if err != nil {
@@ -37,7 +44,17 @@ func (h *RecipeHandler) ListRecipes(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetRecipe handles GET /v1/recipes/:id
+// @Summary Get a recipe by ID
+// @Description Get a recipe by its unique ID
+// @Tags recipes
+// @Accept json
+// @Produce json
+// @Param id path string true "Recipe ID"
+// @Success 200 {object} models.Recipe
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/recipes/{id} [get]
 func (h *RecipeHandler) GetRecipe(c *gin.Context) {
 	id := c.Param("id")
 	recipe, err := h.Service.GetRecipe(c.Request.Context(), id)
@@ -49,7 +66,16 @@ func (h *RecipeHandler) GetRecipe(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// SaveRecipe handles POST /v1/recipes
+// @Summary Create a new recipe
+// @Description Create a new recipe with the provided details
+// @Tags recipes
+// @Accept json
+// @Produce json
+// @Param recipe body models.Recipe true "Recipe object"
+// @Success 201 {object} models.Recipe
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/recipes [post]
 func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 	var recipe models.Recipe
 	if err := c.ShouldBindJSON(&recipe); err != nil {
@@ -127,7 +153,18 @@ func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 	c.JSON(http.StatusCreated, resp)
 }
 
-// UpdateRecipe handles PUT /v1/recipes/:id
+// @Summary Update a recipe
+// @Description Update an existing recipe with new details
+// @Tags recipes
+// @Accept json
+// @Produce json
+// @Param id path string true "Recipe ID"
+// @Param recipe body models.Recipe true "Updated recipe object"
+// @Success 200 {object} models.Recipe
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/recipes/{id} [put]
 func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
 	var recipe models.Recipe
 	if err := c.ShouldBindJSON(&recipe); err != nil {
@@ -176,7 +213,16 @@ func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// DeleteRecipe handles DELETE /v1/recipes/:id
+// @Summary Delete a recipe
+// @Description Delete a recipe by its ID
+// @Tags recipes
+// @Accept json
+// @Produce json
+// @Param id path string true "Recipe ID"
+// @Success 204 "No Content"
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/recipes/{id} [delete]
 func (h *RecipeHandler) DeleteRecipe(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.Service.DeleteRecipe(c.Request.Context(), id); err != nil {
@@ -186,28 +232,48 @@ func (h *RecipeHandler) DeleteRecipe(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// ResolveRecipe handles POST /v1/recipes/resolve
+// @Summary Resolve a recipe
+// @Description Resolve a recipe based on a query and attributes
+// @Tags recipes
+// @Accept json
+// @Produce json
+// @Param request body ResolveRecipeRequest true "Resolve recipe request"
+// @Success 200 {object} ResolveRecipeResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/recipes/resolve [post]
 func (h *RecipeHandler) ResolveRecipe(c *gin.Context) {
-	var payload struct {
-		Query      string                 `json:"query"`
-		Attributes map[string]interface{} `json:"attributes"`
-	}
-
-	if err := c.ShouldBindJSON(&payload); err != nil {
+	var req ResolveRecipeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Call the service-level ResolveRecipe
-	resolved, similar, err := h.Service.ResolveRecipe(payload.Query, payload.Attributes)
+	resolved, similar, err := h.Service.ResolveRecipe(req.Query, req.Attributes)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Return the resolved recipe and similar recipes.
-	c.JSON(http.StatusOK, gin.H{
-		"resolved": resolved,
-		"similar":  similar,
+	c.JSON(http.StatusOK, ResolveRecipeResponse{
+		Resolved: resolved,
+		Similar:  similar,
 	})
+}
+
+// ResolveRecipeRequest represents the request body for recipe resolution
+type ResolveRecipeRequest struct {
+	Query      string                 `json:"query" binding:"required"`
+	Attributes map[string]interface{} `json:"attributes"`
+}
+
+// ResolveRecipeResponse represents the response for recipe resolution
+type ResolveRecipeResponse struct {
+	Resolved *models.Recipe   `json:"resolved"`
+	Similar  []*models.Recipe `json:"similar"`
+}
+
+// ErrorResponse represents a standard error response
+type ErrorResponse struct {
+	Error string `json:"error"`
 }

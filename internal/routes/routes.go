@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"context"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -44,8 +45,16 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 			}
 		}
 
-		if err := repositories.AutoMigrate(); err != nil {
-			zap.S().Fatalf("failed to auto migrate: %v", err)
+		// Create UUID extension and run migrations
+		sqlDB, err := db.DB()
+		if err != nil {
+			zap.S().Fatalf("failed to get underlying sql.DB: %v", err)
+		}
+		if _, err := sqlDB.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
+			zap.S().Warnf("failed to create uuid-ossp extension: %v", err)
+		}
+		if err := repositories.RunMigrations(db); err != nil {
+			zap.S().Fatalf("failed to run migrations: %v", err)
 		}
 	}
 
@@ -137,7 +146,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 
 	// For test or integration environments, clear users and insert a dummy user.
 	if gin.Mode() == gin.TestMode || os.Getenv("INTEGRATION_TEST") == "true" {
-		if err := repositories.ClearUsers(); err != nil {
+		if err := db.Exec("DELETE FROM users").Error; err != nil {
 			zap.S().Fatal("failed to clear users table")
 		}
 		dummyUser := models.User{
@@ -146,7 +155,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 			Email:    "dummy@example.com",
 			Password: "dummy", // Replace with a hashed password in production if needed.
 		}
-		if err := repositories.DB.FirstOrCreate(&dummyUser, models.User{ID: "1"}).Error; err != nil {
+		if err := db.FirstOrCreate(&dummyUser, models.User{ID: "1"}).Error; err != nil {
 			zap.S().Fatal("failed to create dummy user")
 		}
 	}
