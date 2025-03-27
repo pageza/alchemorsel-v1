@@ -21,21 +21,26 @@ services:
       timeout: 5s
       start_period: 60s
       retries: 5
+    secrets:
+      - postgres_user
+      - postgres_password
+      - jwt_secret
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ci_password}
-      POSTGRES_DB: ${POSTGRES_DB:-ci_recipesdb}
-      JWT_SECRET: ${JWT_SECRET:-secret}
       POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      DB_SOURCE: ${DB_SOURCE:-postgres://postgres:ci_password@postgres:5432/ci_recipesdb?sslmode=disable}
+      DB_SOURCE: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+    profiles:
+      - development
+      - production
+      - testing
 
   postgres:
     image: ankane/pgvector
     container_name: postgres
+    secrets:
+      - postgres_user
+      - postgres_password
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     networks:
       - appnet
@@ -48,6 +53,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    profiles:
+      - development
+      - production
+      - testing
 
   redis:
     image: redis:latest
@@ -63,6 +72,19 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    profiles:
+      - development
+      - production
+      - testing
+
+  # Security scanning service
+  security-scan:
+    image: aquasec/trivy:latest
+    volumes:
+      - .:/scan
+    command: filesystem --no-progress --severity HIGH,CRITICAL /scan
+    profiles:
+      - security
 
 volumes:
   postgres-data:
@@ -71,3 +93,11 @@ volumes:
 networks:
   appnet:
     driver: bridge
+
+secrets:
+  postgres_user:
+    file: ./secrets/postgres_user.txt
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt

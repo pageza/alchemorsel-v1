@@ -19,6 +19,16 @@ COPY . .
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
+# Security scanning stage
+FROM aquasec/trivy:latest AS trivy
+COPY --from=builder /app/main /app/main
+RUN trivy filesystem --no-progress --severity HIGH,CRITICAL /app/main
+
+FROM snyk/snyk:golang AS snyk
+COPY --from=builder /app /app
+WORKDIR /app
+RUN snyk test --severity-threshold=high
+
 # Final stage
 FROM alpine:latest
 

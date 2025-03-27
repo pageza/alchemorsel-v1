@@ -1,6 +1,9 @@
 package monitoring
 
 import (
+	"fmt"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -77,6 +80,19 @@ var (
 	)
 )
 
+// MetricsCollector collects and stores metrics
+type MetricsCollector struct {
+	mu      sync.RWMutex
+	metrics map[string][]string
+}
+
+// NewMetricsCollector creates a new metrics collector
+func NewMetricsCollector() *MetricsCollector {
+	return &MetricsCollector{
+		metrics: make(map[string][]string),
+	}
+}
+
 // ObserveHTTPRequest records metrics for an HTTP request
 func ObserveHTTPRequest(method, path string, status int, duration time.Duration) {
 	httpRequestsTotal.WithLabelValues(method, path, string(status)).Inc()
@@ -111,4 +127,28 @@ func ObserveCacheHit() {
 // ObserveCacheMiss records a cache miss
 func ObserveCacheMiss() {
 	cacheMisses.Inc()
+}
+
+// RecordMetric records a metric with the given name and value
+func (m *MetricsCollector) RecordMetric(name string, value interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Convert value to string representation
+	var valueStr string
+	switch v := value.(type) {
+	case int:
+		valueStr = strconv.Itoa(v)
+	case int64:
+		valueStr = strconv.FormatInt(v, 10)
+	case float64:
+		valueStr = strconv.FormatFloat(v, 'f', -1, 64)
+	case string:
+		valueStr = v
+	default:
+		valueStr = fmt.Sprintf("%v", v)
+	}
+
+	// Store the metric
+	m.metrics[name] = append(m.metrics[name], valueStr)
 }

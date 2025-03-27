@@ -1,0 +1,52 @@
+input {
+  beats {
+    port => 5044
+  }
+  tcp {
+    port => 5000
+  }
+  udp {
+    port => 5000
+  }
+}
+
+filter {
+  if [type] == "application" {
+    grok {
+      match => { "message" => "%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level} %{GREEDYDATA:message}" }
+    }
+    date {
+      match => [ "timestamp", "ISO8601" ]
+      target => "@timestamp"
+    }
+  }
+  
+  if [type] == "system" {
+    grok {
+      match => { "message" => "%{SYSLOGBASE} %{GREEDYDATA:message}" }
+    }
+  }
+  
+  if [type] == "access" {
+    grok {
+      match => { "message" => "%{COMBINEDAPACHELOG}" }
+    }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["elasticsearch:9200"]
+    index => "%{[@metadata][beat]}-%{+YYYY.MM.dd}"
+    user => "${ELASTIC_USER}"
+    password => "${ELASTIC_PASSWORD}"
+    ssl => true
+    ssl_certificate_verification => false
+  }
+}
+
+pipeline.workers: 2
+pipeline.batch.size: 125
+pipeline.batch.delay: 50
+queue.type: persisted
+queue.maxBytes: 1gb 

@@ -10,104 +10,212 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Environment represents the application environment
+type Environment string
+
+const (
+	Development Environment = "development"
+	Staging     Environment = "staging"
+	Production  Environment = "production"
+)
+
 // Config holds all configuration for the application
 type Config struct {
-	Database struct {
-		Driver   string
-		Host     string
-		Port     int
-		User     string
-		Password string
-		DBName   string
-		SSLMode  string
-	}
-	Server struct {
-		Port         int
-		Timeout      time.Duration
-		ReadTimeout  time.Duration
-		WriteTimeout time.Duration
-	}
-	RateLimit struct {
-		RequestsPerSecond float64
-		Burst             int
-		ExpirationTTL     time.Duration
-	}
-	JWT struct {
-		Secret          string
-		ExpirationHours int
-		RefreshHours    int
-	}
-	Email struct {
-		Host     string
-		Port     int
-		Username string
-		Password string
-		From     string
-	}
-	Logging struct {
-		Level  string
-		Format string
-		Output string
-	}
+	Environment Environment
+	Database    DatabaseConfig
+	Server      ServerConfig
+	RateLimit   RateLimitConfig
+	JWT         JWTConfig
+	Email       EmailConfig
+	Logging     LoggingConfig
 }
 
 // DatabaseConfig holds database configuration settings
 type DatabaseConfig struct {
-	Driver            string        `env:"DB_DRIVER" envDefault:"postgres"`
-	Host              string        `env:"DB_HOST" envDefault:"localhost"`
-	Port              int           `env:"DB_PORT" envDefault:"5432"`
-	User              string        `env:"DB_USER" envDefault:"postgres"`
-	Password          string        `env:"DB_PASSWORD" envDefault:"postgres"`
-	DBName            string        `env:"DB_NAME" envDefault:"alchemorsel"`
-	SSLMode           string        `env:"DB_SSL_MODE" envDefault:"disable"`
-	BackupDir         string        `env:"DB_BACKUP_DIR" envDefault:"/var/backups/db"`
-	BackupRetention   time.Duration `env:"DB_BACKUP_RETENTION" envDefault:"168h"` // 7 days
-	BackupInterval    time.Duration `env:"DB_BACKUP_INTERVAL" envDefault:"24h"`   // 1 day
+	Driver            string        `env:"DB_DRIVER" envDefault:"postgres" validate:"required,oneof=postgres sqlite"`
+	Host              string        `env:"DB_HOST" envDefault:"localhost" validate:"required"`
+	Port              int           `env:"DB_PORT" envDefault:"5432" validate:"required,min=1,max=65535"`
+	User              string        `env:"DB_USER" envDefault:"postgres" validate:"required"`
+	Password          string        `env:"DB_PASSWORD" envDefault:"postgres" validate:"required"`
+	DBName            string        `env:"DB_NAME" envDefault:"alchemorsel" validate:"required"`
+	SSLMode           string        `env:"DB_SSL_MODE" envDefault:"disable" validate:"required,oneof=disable require verify-ca verify-full"`
+	BackupDir         string        `env:"DB_BACKUP_DIR" envDefault:"/var/backups/db" validate:"required"`
+	BackupRetention   time.Duration `env:"DB_BACKUP_RETENTION" envDefault:"168h" validate:"required"` // 7 days
+	BackupInterval    time.Duration `env:"DB_BACKUP_INTERVAL" envDefault:"24h" validate:"required"`   // 1 day
 	BackupCompression bool          `env:"DB_BACKUP_COMPRESSION" envDefault:"true"`
 }
 
-// NewConfig creates a new Config with default values
-func NewConfig() *Config {
-	cfg := &Config{}
+// ServerConfig holds server configuration settings
+type ServerConfig struct {
+	Port         int           `env:"SERVER_PORT" envDefault:"8080" validate:"required,min=1,max=65535"`
+	Timeout      time.Duration `env:"SERVER_TIMEOUT" envDefault:"30s" validate:"required"`
+	ReadTimeout  time.Duration `env:"SERVER_READ_TIMEOUT" envDefault:"10s" validate:"required"`
+	WriteTimeout time.Duration `env:"SERVER_WRITE_TIMEOUT" envDefault:"10s" validate:"required"`
+}
 
-	// Database defaults
-	cfg.Database.Driver = getEnvOrDefault("DB_DRIVER", "postgres")
-	cfg.Database.Host = getEnvOrDefault("DB_HOST", "localhost")
-	cfg.Database.Port = getEnvIntOrDefault("DB_PORT", 5432)
-	cfg.Database.User = getEnvOrDefault("DB_USER", "postgres")
-	cfg.Database.Password = getEnvOrDefault("DB_PASSWORD", "postgres")
-	cfg.Database.DBName = getEnvOrDefault("DB_NAME", "alchemorsel")
-	cfg.Database.SSLMode = getEnvOrDefault("DB_SSL_MODE", "disable")
+// RateLimitConfig holds rate limiting configuration
+type RateLimitConfig struct {
+	RequestsPerSecond float64       `env:"RATE_LIMIT_REQUESTS" envDefault:"5.0" validate:"required,min=0"`
+	Burst             int           `env:"RATE_LIMIT_BURST" envDefault:"10" validate:"required,min=1"`
+	ExpirationTTL     time.Duration `env:"RATE_LIMIT_EXPIRATION" envDefault:"1h" validate:"required"`
+}
 
-	// Server defaults
-	cfg.Server.Port = getEnvIntOrDefault("SERVER_PORT", 8080)
-	cfg.Server.Timeout = getEnvDurationOrDefault("SERVER_TIMEOUT", 30*time.Second)
-	cfg.Server.ReadTimeout = getEnvDurationOrDefault("SERVER_READ_TIMEOUT", 10*time.Second)
-	cfg.Server.WriteTimeout = getEnvDurationOrDefault("SERVER_WRITE_TIMEOUT", 10*time.Second)
+// JWTConfig holds JWT configuration
+type JWTConfig struct {
+	Secret          string `env:"JWT_SECRET" envDefault:"your-secret-key" validate:"required,min=32"`
+	ExpirationHours int    `env:"JWT_EXPIRATION_HOURS" envDefault:"24" validate:"required,min=1"`
+	RefreshHours    int    `env:"JWT_REFRESH_HOURS" envDefault:"168" validate:"required,min=1"` // 7 days
+}
 
-	// Rate limit defaults
-	cfg.RateLimit.RequestsPerSecond = getEnvFloatOrDefault("RATE_LIMIT_REQUESTS", 5.0)
-	cfg.RateLimit.Burst = getEnvIntOrDefault("RATE_LIMIT_BURST", 10)
-	cfg.RateLimit.ExpirationTTL = getEnvDurationOrDefault("RATE_LIMIT_EXPIRATION", time.Hour)
+// EmailConfig holds email configuration
+type EmailConfig struct {
+	Host     string `env:"EMAIL_HOST" envDefault:"smtp.gmail.com" validate:"required,hostname"`
+	Port     int    `env:"EMAIL_PORT" envDefault:"587" validate:"required,min=1,max=65535"`
+	Username string `env:"EMAIL_USERNAME" envDefault:"" validate:"required,email"`
+	Password string `env:"EMAIL_PASSWORD" envDefault:"" validate:"required"`
+	From     string `env:"EMAIL_FROM" envDefault:"noreply@alchemorsel.com" validate:"required,email"`
+}
 
-	// JWT defaults
-	cfg.JWT.Secret = getEnvOrDefault("JWT_SECRET", "your-secret-key")
-	cfg.JWT.ExpirationHours = getEnvIntOrDefault("JWT_EXPIRATION_HOURS", 24)
-	cfg.JWT.RefreshHours = getEnvIntOrDefault("JWT_REFRESH_HOURS", 168) // 7 days
+// LoggingConfig holds logging configuration
+type LoggingConfig struct {
+	Level  string `env:"LOG_LEVEL" envDefault:"info" validate:"required,oneof=debug info warn error"`
+	Format string `env:"LOG_FORMAT" envDefault:"json" validate:"required,oneof=json text"`
+	Output string `env:"LOG_OUTPUT" envDefault:"stdout" validate:"required"`
+}
 
-	// Email defaults
-	cfg.Email.Host = getEnvOrDefault("EMAIL_HOST", "smtp.gmail.com")
-	cfg.Email.Port = getEnvIntOrDefault("EMAIL_PORT", 587)
-	cfg.Email.Username = getEnvOrDefault("EMAIL_USERNAME", "")
-	cfg.Email.Password = getEnvOrDefault("EMAIL_PASSWORD", "")
-	cfg.Email.From = getEnvOrDefault("EMAIL_FROM", "noreply@alchemorsel.com")
+// NewConfig creates a new Config with default values and validates the configuration
+func NewConfig() (*Config, error) {
+	env := Environment(getEnvOrDefault("APP_ENV", "development"))
+	if !isValidEnvironment(env) {
+		return nil, fmt.Errorf("invalid environment: %s", env)
+	}
 
-	// Logging defaults
-	cfg.Logging.Level = getEnvOrDefault("LOG_LEVEL", "info")
-	cfg.Logging.Format = getEnvOrDefault("LOG_FORMAT", "json")
-	cfg.Logging.Output = getEnvOrDefault("LOG_OUTPUT", "stdout")
+	cfg := &Config{
+		Environment: env,
+	}
 
-	return cfg
+	// Load configuration from environment
+	if err := cfg.loadFromEnv(); err != nil {
+		return nil, fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	// Validate configuration
+	if err := cfg.validate(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	return cfg, nil
+}
+
+// loadFromEnv loads configuration from environment variables
+func (c *Config) loadFromEnv() error {
+	// Database configuration
+	c.Database.Driver = getEnvOrDefault("DB_DRIVER", "postgres")
+	c.Database.Host = getEnvOrDefault("DB_HOST", "localhost")
+	c.Database.Port = getEnvIntOrDefault("DB_PORT", 5432)
+	c.Database.User = getEnvOrDefault("DB_USER", "postgres")
+	c.Database.Password = getEnvOrDefault("DB_PASSWORD", "postgres")
+	c.Database.DBName = getEnvOrDefault("DB_NAME", "alchemorsel")
+	c.Database.SSLMode = getEnvOrDefault("DB_SSL_MODE", "disable")
+	c.Database.BackupDir = getEnvOrDefault("DB_BACKUP_DIR", "/var/backups/db")
+	c.Database.BackupRetention = getEnvDurationOrDefault("DB_BACKUP_RETENTION", 7*24*time.Hour)
+	c.Database.BackupInterval = getEnvDurationOrDefault("DB_BACKUP_INTERVAL", 24*time.Hour)
+	c.Database.BackupCompression = getEnvBoolOrDefault("DB_BACKUP_COMPRESSION", true)
+
+	// Server configuration
+	c.Server.Port = getEnvIntOrDefault("SERVER_PORT", 8080)
+	c.Server.Timeout = getEnvDurationOrDefault("SERVER_TIMEOUT", 30*time.Second)
+	c.Server.ReadTimeout = getEnvDurationOrDefault("SERVER_READ_TIMEOUT", 10*time.Second)
+	c.Server.WriteTimeout = getEnvDurationOrDefault("SERVER_WRITE_TIMEOUT", 10*time.Second)
+
+	// Rate limit configuration
+	c.RateLimit.RequestsPerSecond = getEnvFloatOrDefault("RATE_LIMIT_REQUESTS", 5.0)
+	c.RateLimit.Burst = getEnvIntOrDefault("RATE_LIMIT_BURST", 10)
+	c.RateLimit.ExpirationTTL = getEnvDurationOrDefault("RATE_LIMIT_EXPIRATION", time.Hour)
+
+	// JWT configuration
+	c.JWT.Secret = getEnvOrDefault("JWT_SECRET", "your-secret-key")
+	c.JWT.ExpirationHours = getEnvIntOrDefault("JWT_EXPIRATION_HOURS", 24)
+	c.JWT.RefreshHours = getEnvIntOrDefault("JWT_REFRESH_HOURS", 168)
+
+	// Email configuration
+	c.Email.Host = getEnvOrDefault("EMAIL_HOST", "smtp.gmail.com")
+	c.Email.Port = getEnvIntOrDefault("EMAIL_PORT", 587)
+	c.Email.Username = getEnvOrDefault("EMAIL_USERNAME", "")
+	c.Email.Password = getEnvOrDefault("EMAIL_PASSWORD", "")
+	c.Email.From = getEnvOrDefault("EMAIL_FROM", "noreply@alchemorsel.com")
+
+	// Logging configuration
+	c.Logging.Level = getEnvOrDefault("LOG_LEVEL", "info")
+	c.Logging.Format = getEnvOrDefault("LOG_FORMAT", "json")
+	c.Logging.Output = getEnvOrDefault("LOG_OUTPUT", "stdout")
+
+	return nil
+}
+
+// validate validates the configuration
+func (c *Config) validate() error {
+	// Validate database configuration
+	if c.Database.Driver != "postgres" && c.Database.Driver != "sqlite" {
+		return fmt.Errorf("invalid database driver: %s", c.Database.Driver)
+	}
+	if c.Database.Port < 1 || c.Database.Port > 65535 {
+		return fmt.Errorf("invalid database port: %d", c.Database.Port)
+	}
+	if c.Database.SSLMode != "disable" && c.Database.SSLMode != "require" &&
+		c.Database.SSLMode != "verify-ca" && c.Database.SSLMode != "verify-full" {
+		return fmt.Errorf("invalid SSL mode: %s", c.Database.SSLMode)
+	}
+
+	// Validate server configuration
+	if c.Server.Port < 1 || c.Server.Port > 65535 {
+		return fmt.Errorf("invalid server port: %d", c.Server.Port)
+	}
+
+	// Validate rate limit configuration
+	if c.RateLimit.RequestsPerSecond < 0 {
+		return fmt.Errorf("invalid rate limit requests per second: %f", c.RateLimit.RequestsPerSecond)
+	}
+	if c.RateLimit.Burst < 1 {
+		return fmt.Errorf("invalid rate limit burst: %d", c.RateLimit.Burst)
+	}
+
+	// Validate JWT configuration
+	if len(c.JWT.Secret) < 32 {
+		return fmt.Errorf("JWT secret must be at least 32 characters long")
+	}
+	if c.JWT.ExpirationHours < 1 {
+		return fmt.Errorf("invalid JWT expiration hours: %d", c.JWT.ExpirationHours)
+	}
+	if c.JWT.RefreshHours < 1 {
+		return fmt.Errorf("invalid JWT refresh hours: %d", c.JWT.RefreshHours)
+	}
+
+	// Validate email configuration
+	if c.Email.Port < 1 || c.Email.Port > 65535 {
+		return fmt.Errorf("invalid email port: %d", c.Email.Port)
+	}
+
+	// Validate logging configuration
+	if c.Logging.Level != "debug" && c.Logging.Level != "info" &&
+		c.Logging.Level != "warn" && c.Logging.Level != "error" {
+		return fmt.Errorf("invalid log level: %s", c.Logging.Level)
+	}
+	if c.Logging.Format != "json" && c.Logging.Format != "text" {
+		return fmt.Errorf("invalid log format: %s", c.Logging.Format)
+	}
+
+	return nil
+}
+
+// isValidEnvironment checks if the environment is valid
+func isValidEnvironment(env Environment) bool {
+	switch env {
+	case Development, Staging, Production:
+		return true
+	default:
+		return false
+	}
 }
 
 // GetDSN returns the database connection string
@@ -185,11 +293,16 @@ func getEnvBoolOrDefault(key string, defaultValue bool) bool {
 
 // LoadConfig loads environment variables from a .env file.
 func LoadConfig() error {
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("No .env file found, relying on environment variables.")
+	// Load .env file based on environment
+	env := getEnvOrDefault("APP_ENV", "development")
+	envFile := fmt.Sprintf(".env.%s", env)
+
+	if err := godotenv.Load(envFile); err != nil {
+		log.Printf("No %s file found, falling back to default .env file", envFile)
+		if err := godotenv.Load(); err != nil {
+			log.Println("No .env file found, relying on environment variables.")
+		}
 	}
-	// TODO: Load and validate required environment variables as needed
 	return nil
 }
 

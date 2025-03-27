@@ -3,6 +3,8 @@ package repositories
 import (
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pageza/alchemorsel-v1/internal/config"
@@ -95,41 +97,189 @@ func MonitorPool(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// InitDB initializes the database connection with proper connection pooling
+// RetryConfig holds configuration for connection retries
+type RetryConfig struct {
+	MaxRetries      int
+	InitialInterval time.Duration
+	MaxInterval     time.Duration
+	Multiplier      float64
+	MaxElapsedTime  time.Duration
+}
+
+// DefaultRetryConfig returns default retry configuration
+func DefaultRetryConfig() *RetryConfig {
+	return &RetryConfig{
+		MaxRetries:      5,
+		InitialInterval: 1 * time.Second,
+		MaxInterval:     30 * time.Second,
+		Multiplier:      2.0,
+		MaxElapsedTime:  30 * time.Second,
+	}
+}
+
+// CircuitBreaker implements a simple circuit breaker pattern
+type CircuitBreaker struct {
+	failures    int32
+	lastFailure time.Time
+	threshold   int32
+	timeout     time.Duration
+	mu          sync.RWMutex
+}
+
+// NewCircuitBreaker creates a new circuit breaker
+func NewCircuitBreaker(threshold int32, timeout time.Duration) *CircuitBreaker {
+	return &CircuitBreaker{
+		threshold: threshold,
+		timeout:   timeout,
+	}
+}
+
+// RecordFailure records a failure and returns true if circuit is open
+func (cb *CircuitBreaker) RecordFailure() bool {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	atomic.AddInt32(&cb.failures, 1)
+	cb.lastFailure = time.Now()
+
+	return atomic.LoadInt32(&cb.failures) >= cb.threshold
+}
+
+// RecordSuccess resets the circuit breaker
+func (cb *CircuitBreaker) RecordSuccess() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	atomic.StoreInt32(&cb.failures, 0)
+}
+
+// IsOpen returns true if the circuit is open
+func (cb *CircuitBreaker) IsOpen() bool {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+
+	if atomic.LoadInt32(&cb.failures) >= cb.threshold {
+		if time.Since(cb.lastFailure) > cb.timeout {
+			// Reset after timeout
+			atomic.StoreInt32(&cb.failures, 0)
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+// RetryWithBackoff attempts to execute a function with exponential backoff
+func RetryWithBackoff(operation func() error, config *RetryConfig) error {
+	var lastErr error
+	interval := config.InitialInterval
+	startTime := time.Now()
+
+	for i := 0; i < config.MaxRetries; i++ {
+		if err := operation(); err != nil {
+			lastErr = err
+			RecordRetryAttempt()
+
+			// Check if we've exceeded max elapsed time
+			if time.Since(startTime) > config.MaxElapsedTime {
+				return fmt.Errorf("max elapsed time exceeded: %w", lastErr)
+			}
+
+			// Calculate next interval with exponential backoff
+			interval = time.Duration(float64(interval) * config.Multiplier)
+			if interval > config.MaxInterval {
+				interval = config.MaxInterval
+			}
+
+			log.Warn("Database operation failed, retrying...",
+				zap.Int("attempt", i+1),
+				zap.Int("max_retries", config.MaxRetries),
+				zap.Duration("interval", interval),
+				zap.Error(err),
+			)
+
+			time.Sleep(interval)
+			continue
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("max retries exceeded: %w", lastErr)
+}
+
+// InitDB initializes the database connection with proper connection pooling and retry logic
 func InitDB(config *config.Config) error {
 	var err error
 	dsn := config.GetDSN()
 
-	dbInstance, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
-	}
+	// Create circuit breaker
+	circuitBreaker := NewCircuitBreaker(5, 30*time.Second)
 
-	sqlDB, err := dbInstance.DB()
-	if err != nil {
-		return fmt.Errorf("failed to get underlying *sql.DB: %w", err)
-	}
-
-	// Set connection pool parameters
-	sqlDB.SetMaxIdleConns(25)                  // Maximum number of idle connections
-	sqlDB.SetMaxOpenConns(100)                 // Maximum number of open connections
-	sqlDB.SetConnMaxLifetime(time.Hour)        // Maximum amount of time a connection may be reused
-	sqlDB.SetConnMaxIdleTime(time.Minute * 30) // Maximum amount of time a connection may be idle
-
-	// Start connection pool monitoring
-	go MonitorPool(context.Background(), time.Minute)
-
-	// Start backup scheduler if using PostgreSQL
-	if config.Database.Driver == "postgres" {
-		backupConfig := &BackupConfig{
-			BackupDir:          "/var/backups/db",  // Default backup directory
-			RetentionPeriod:    7 * 24 * time.Hour, // 7 days
-			BackupInterval:     24 * time.Hour,     // 1 day
-			CompressionEnabled: true,
+	// Initialize database with retry logic
+	err = RetryWithBackoff(func() error {
+		if circuitBreaker.IsOpen() {
+			UpdateCircuitBreakerMetrics(true, atomic.LoadInt32(&circuitBreaker.failures))
+			return fmt.Errorf("circuit breaker is open")
 		}
-		go StartBackupScheduler(context.Background(), backupConfig)
+
+		dbInstance, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+			Logger: logger.Default.LogMode(logger.Info),
+		})
+		if err != nil {
+			circuitBreaker.RecordFailure()
+			UpdateCircuitBreakerMetrics(false, atomic.LoadInt32(&circuitBreaker.failures))
+			RecordConnectionError()
+			return fmt.Errorf("failed to connect to database: %w", err)
+		}
+
+		sqlDB, err := dbInstance.DB()
+		if err != nil {
+			circuitBreaker.RecordFailure()
+			UpdateCircuitBreakerMetrics(false, atomic.LoadInt32(&circuitBreaker.failures))
+			RecordConnectionError()
+			return fmt.Errorf("failed to get underlying *sql.DB: %w", err)
+		}
+
+		// Test the connection
+		if err := sqlDB.Ping(); err != nil {
+			circuitBreaker.RecordFailure()
+			UpdateCircuitBreakerMetrics(false, atomic.LoadInt32(&circuitBreaker.failures))
+			RecordConnectionError()
+			return fmt.Errorf("failed to ping database: %w", err)
+		}
+
+		circuitBreaker.RecordSuccess()
+		UpdateCircuitBreakerMetrics(false, 0)
+
+		// Set connection pool parameters
+		sqlDB.SetMaxIdleConns(25)                  // Maximum number of idle connections
+		sqlDB.SetMaxOpenConns(100)                 // Maximum number of open connections
+		sqlDB.SetConnMaxLifetime(time.Hour)        // Maximum amount of time a connection may be reused
+		sqlDB.SetConnMaxIdleTime(time.Minute * 30) // Maximum amount of time a connection may be idle
+
+		// Start connection pool monitoring
+		go MonitorPool(context.Background(), time.Minute)
+
+		// Start metrics collection
+		go StartMetricsCollection(sqlDB, time.Minute)
+
+		// Start backup scheduler if using PostgreSQL
+		if config.Database.Driver == "postgres" {
+			backupConfig := &BackupConfig{
+				BackupDir:          "/var/backups/db",  // Default backup directory
+				RetentionPeriod:    7 * 24 * time.Hour, // 7 days
+				BackupInterval:     24 * time.Hour,     // 1 day
+				CompressionEnabled: true,
+			}
+			go StartBackupScheduler(context.Background(), backupConfig)
+		}
+
+		return nil
+	}, DefaultRetryConfig())
+
+	if err != nil {
+		return fmt.Errorf("failed to initialize database after retries: %w", err)
 	}
 
 	return nil

@@ -1,0 +1,85 @@
+jwt:
+  secret: "${JWT_SECRET}"
+  expiration_hours: 24
+
+api_key:
+  rotation_days: 30
+  scopes:
+    - read
+    - write
+    - admin
+
+rate_limit:
+  requests: 100
+  window_seconds: 60
+
+cors:
+  allowed_origins:
+    - "http://localhost:3000"
+    - "https://alchemorsel.com"
+  allowed_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "OPTIONS"
+  allowed_headers:
+    - "Authorization"
+    - "Content-Type"
+    - "X-Requested-With"
+  exposed_headers:
+    - "Content-Length"
+    - "X-Total-Count"
+  allow_credentials: true
+  max_age_seconds: 3600
+
+security_headers:
+  content_security_policy: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+  x_frame_options: "DENY"
+  x_content_type_options: "nosniff"
+  x_xss_protection: "1; mode=block"
+  strict_transport_security: "max-age=31536000; includeSubDomains"
+  referrer_policy: "strict-origin-when-cross-origin"
+  permissions_policy: "geolocation=(), microphone=(), camera=()"
+
+input_validation:
+  max_string_length: 1000
+  max_array_length: 100
+  allowed_html_tags: []
+  sanitize_html: true
+
+authentication:
+  password_min_length: 8
+  require_special_chars: true
+  require_numbers: true
+  require_uppercase: true
+  require_lowercase: true
+  max_login_attempts: 5
+  lockout_duration_minutes: 30
+
+authorization:
+  roles:
+    - name: "admin"
+      permissions:
+        - "read"
+        - "write"
+        - "delete"
+        - "manage_users"
+    - name: "user"
+      permissions:
+        - "read"
+        - "write"
+    - name: "guest"
+      permissions:
+        - "read"
+
+security_monitoring:
+  log_level: "info"
+  log_format: "json"
+  log_file: "/var/log/security/security.log"
+  alert_on:
+    - "failed_login"
+    - "invalid_token"
+    - "rate_limit_exceeded"
+    - "unauthorized_access"
+  retention_days: 30 
