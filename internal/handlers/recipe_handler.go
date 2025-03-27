@@ -111,12 +111,55 @@ func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 
 // UpdateRecipe handles PUT /v1/recipes/:id
 func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
-	// TODO: Parse request and update an existing recipe.
-	c.JSON(http.StatusOK, gin.H{"message": "UpdateRecipe endpoint - TODO: implement logic"})
+	id := c.Param("id")
+	var req dtos.RecipeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Sanitize input
+	req.Title = strings.TrimSpace(req.Title)
+	for i, ingredient := range req.Ingredients {
+		req.Ingredients[i] = strings.TrimSpace(ingredient)
+	}
+	for i, step := range req.Steps {
+		req.Steps[i] = strings.TrimSpace(step)
+	}
+
+	ingredientsJSON, err := json.Marshal(req.Ingredients)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to marshal ingredients"})
+		return
+	}
+	stepsJSON, err := json.Marshal(req.Steps)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to marshal steps"})
+		return
+	}
+
+	recipe := models.Recipe{
+		Title:             req.Title,
+		Ingredients:       ingredientsJSON,
+		Steps:             stepsJSON,
+		NutritionalInfo:   req.NutritionalInfo,
+		AllergyDisclaimer: req.AllergyDisclaimer,
+	}
+
+	if err := h.Service.UpdateRecipe(id, &recipe); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	resp := dtos.NewRecipeResponse(&recipe)
+	c.JSON(http.StatusOK, resp)
 }
 
 // DeleteRecipe handles DELETE /v1/recipes/:id
 func (h *RecipeHandler) DeleteRecipe(c *gin.Context) {
-	// TODO: Delete recipe by ID.
-	c.JSON(http.StatusOK, gin.H{"message": "DeleteRecipe endpoint - TODO: implement logic"})
+	id := c.Param("id")
+	if err := h.Service.DeleteRecipe(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
