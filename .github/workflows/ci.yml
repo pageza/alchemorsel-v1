@@ -84,12 +84,19 @@ jobs:
         if: always()
         run: docker inspect -f '{{json .State.Health.Log}}' app
 
-      - name: Run Newman E2E Tests
+      - name: Run Newman E2E Tests for Recipe Endpoints
         run: |
           docker run --rm --network container:app \
             -v ${{ github.workspace }}/tests:/etc/newman \
-            postman/newman:alpine run /etc/newman/collections/e2e_collection.json \
-              --env-var "baseUrl=http://localhost:8080" --delay-request 500
+            postman/newman:alpine run /etc/newman/collections/recipe_endpoints.json \
+              --env-var "baseUrl=http://localhost:8080" --delay-request 500 --reporters cli,junit
+
+      - name: Run Newman E2E Tests for User Endpoints
+        run: |
+          docker run --rm --network container:app \
+            -v ${{ github.workspace }}/tests:/etc/newman \
+            postman/newman:alpine run /etc/newman/collections/user_endpoints.json \
+              --env-var "baseUrl=http://localhost:8080" --delay-request 500 --reporters cli,junit
 
       - name: Dump Docker Container Logs
         if: always()

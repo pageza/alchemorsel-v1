@@ -6,6 +6,7 @@ import (
 
 	"github.com/pageza/alchemorsel-v1/internal/config"
 	"github.com/pageza/alchemorsel-v1/internal/db"
+	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
 )
 
@@ -36,6 +37,18 @@ func main() {
 	}
 	if err != nil {
 		log.Fatalf("Error initializing database after %d attempts: %v", maxAttempts, err)
+	}
+
+	// Check and drop legacy constraint 'uni_users_email' if it exists
+	if db.DB.Migrator().HasConstraint(&models.User{}, "uni_users_email") {
+		log.Println("Legacy constraint 'uni_users_email' exists, dropping it...")
+		if err := db.DB.Migrator().DropConstraint(&models.User{}, "uni_users_email"); err != nil {
+			log.Printf("Error dropping legacy constraint: %v", err)
+		} else {
+			log.Println("Legacy constraint dropped successfully.")
+		}
+	} else {
+		log.Println("Legacy constraint 'uni_users_email' does not exist; no drop needed.")
 	}
 
 	// Migrations disabled. Please run SQL migration scripts manually.
