@@ -4,6 +4,8 @@ services:
   app:
     build: .
     container_name: app
+    env_file:
+      - .env
     networks:
       - appnet
     ports:
@@ -20,12 +22,13 @@ services:
       start_period: 60s
       retries: 5
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-      JWT_SECRET: ${JWT_SECRET}
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ci_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ci_recipesdb}
+      JWT_SECRET: ${JWT_SECRET:-secret}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      DB_SOURCE: ${DB_SOURCE:-postgres://postgres:ci_password@postgres:5432/ci_recipesdb?sslmode=disable}
 
   postgres:
     image: ankane/pgvector

@@ -110,7 +110,11 @@ func SetupRouter() *gin.Engine {
 		zap.S().Fatalw("failed to initialize database", "error", err)
 	}
 	if err := repositories.AutoMigrate(); err != nil {
-		zap.S().Fatalw("failed to migrate database", "error", err)
+		if strings.Contains(err.Error(), "uni_users_email") {
+			zap.S().Warnw("legacy migration drop constraint error ignored", "error", err)
+		} else {
+			zap.S().Fatalw("failed to migrate database", "error", err)
+		}
 	}
 
 	// For test or integration environments, clear users and insert a dummy user.

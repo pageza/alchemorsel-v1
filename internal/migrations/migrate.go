@@ -3,6 +3,7 @@ package migrations
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -35,6 +36,10 @@ func RunMigrations() error {
 			err = m.Up()
 			if err == nil || err == migrate.ErrNoChange {
 				zap.L().Info("database migrations ran successfully")
+				return nil
+			}
+			if strings.Contains(err.Error(), "uni_users_email") {
+				zap.L().Warn("Ignoring legacy drop error during migrations", zap.Error(err))
 				return nil
 			}
 			zap.L().Error("failed to run migrations", zap.Int("attempt", i), zap.Error(err))

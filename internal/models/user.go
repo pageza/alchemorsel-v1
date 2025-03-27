@@ -10,7 +10,7 @@ import (
 type User struct {
 	ID                       string         `json:"id"`
 	Name                     string         `json:"name" binding:"required"`
-	Email                    string         `json:"email" binding:"required,email" gorm:"uniqueIndex"`
+	Email                    string         `json:"email" binding:"required,email" gorm:"uniqueIndex:users_email_key"`
 	Password                 string         `json:"password" binding:"required"`
 	IsAdmin                  bool           `json:"is_admin" gorm:"default:false"`
 	EmailVerified            bool           `json:"email_verified" gorm:"default:false"`
