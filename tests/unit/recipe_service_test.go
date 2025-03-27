@@ -1,12 +1,9 @@
 package unit
 
 import (
-	"runtime"
 	"testing"
 
-	"bou.ke/monkey"
 	"github.com/pageza/alchemorsel-v1/internal/models"
-	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/services"
 	"github.com/stretchr/testify/assert"
 )
@@ -21,22 +18,38 @@ import (
 // 	}
 // }
 
+// MockRecipeRepository is a mock implementation of RecipeRepository for testing.
+type MockRecipeRepository struct {
+	SaveRecipeFunc func(recipe *models.Recipe) error
+}
+
+func (m *MockRecipeRepository) GetRecipe(id string) (*models.Recipe, error) { return nil, nil }
+func (m *MockRecipeRepository) SaveRecipe(recipe *models.Recipe) error {
+	return m.SaveRecipeFunc(recipe)
+}
+func (m *MockRecipeRepository) ListRecipes() ([]*models.Recipe, error)              { return nil, nil }
+func (m *MockRecipeRepository) UpdateRecipe(id string, recipe *models.Recipe) error { return nil }
+func (m *MockRecipeRepository) DeleteRecipe(id string) error                        { return nil }
+
 func TestSaveRecipeSuccess(t *testing.T) {
-	if runtime.GOOS == "darwin" {
-		t.Skip("Skipping TestSaveRecipeSuccess on darwin due to monkey patching permission issues")
+	// Remove monkey patching (previously used to patch repositories.SaveRecipe)
+
+	// Create a mock repository that simulates a successful save.
+	mockRepo := &MockRecipeRepository{
+		SaveRecipeFunc: func(recipe *models.Recipe) error {
+			// Simulate successful save (e.g., do nothing and return nil)
+			return nil
+		},
 	}
-	// Monkey-patch repositories.SaveRecipe to simulate a successful database save.
-	patch := monkey.Patch(repositories.SaveRecipe, func(recipe *models.Recipe) error {
-		return nil
-	})
-	defer patch.Unpatch()
 
 	// Create a new recipe with minimal fields.
 	recipe := &models.Recipe{
 		Title: "Test Recipe",
 	}
-	// Call the service SaveRecipe (this will set CreatedAt and UpdatedAt).
-	service := &services.DefaultRecipeService{}
+
+	// Instantiate the service with the mock repository.
+	service := &services.DefaultRecipeService{Repo: mockRepo}
+
 	err := service.SaveRecipe(recipe)
 	assert.Nil(t, err, "Expected no error on saving recipe")
 	assert.False(t, recipe.CreatedAt.IsZero(), "CreatedAt should be set")
