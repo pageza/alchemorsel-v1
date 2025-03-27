@@ -2,10 +2,12 @@ package main
 
 import (
 	"log"
+	"strings"
 	"time"
 
 	"github.com/pageza/alchemorsel-v1/internal/config"
 	"github.com/pageza/alchemorsel-v1/internal/db"
+	"github.com/pageza/alchemorsel-v1/internal/migrations"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
 )
@@ -51,7 +53,15 @@ func main() {
 		log.Println("Legacy constraint 'uni_users_email' does not exist; no drop needed.")
 	}
 
-	// Migrations disabled. Please run SQL migration scripts manually.
+	// Run migrations
+	err = migrations.RunMigrations()
+	if err != nil {
+		if strings.Contains(err.Error(), "uni_users_email") {
+			log.Printf("Ignoring legacy drop error: %v", err)
+		} else {
+			log.Fatalf("Error running migrations: %v", err)
+		}
+	}
 
 	// Setup and start the Gin router
 	router := routes.SetupRouter()
