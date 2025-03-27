@@ -5,25 +5,26 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/pageza/alchemorsel-v1/internal/config"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-// dbInstance is the global database instance
-var dbInstance *gorm.DB
+var (
+	dbInstance *gorm.DB
+	log        = zap.L().Named("db")
+)
 
 // PoolStats represents database connection pool statistics
 type PoolStats struct {
-	MaxOpenConnections int
-	OpenConnections    int
-	InUse              int
-	Idle               int
-	WaitCount          int64
-	WaitDuration       time.Duration
+	MaxOpenConnections int           // Maximum number of open connections
+	OpenConnections    int           // Current number of open connections
+	InUseConnections   int           // Number of connections currently in use
+	IdleConnections    int           // Number of idle connections
+	WaitCount          int64         // Total number of connections waited for
+	WaitDuration       time.Duration // Total time blocked waiting for a new connection
 }
 
 // GetPoolStats returns the current connection pool statistics
@@ -34,14 +35,14 @@ func GetPoolStats() (*PoolStats, error) {
 
 	sqlDB, err := dbInstance.DB()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get database instance: %w", err)
+		return nil, fmt.Errorf("failed to get underlying *sql.DB: %w", err)
 	}
 
 	stats := &PoolStats{
 		MaxOpenConnections: sqlDB.Stats().MaxOpenConnections,
 		OpenConnections:    sqlDB.Stats().OpenConnections,
-		InUse:              sqlDB.Stats().InUse,
-		Idle:               sqlDB.Stats().Idle,
+		InUseConnections:   sqlDB.Stats().InUse,
+		IdleConnections:    sqlDB.Stats().Idle,
 		WaitCount:          sqlDB.Stats().WaitCount,
 		WaitDuration:       sqlDB.Stats().WaitDuration,
 	}
@@ -49,100 +50,86 @@ func GetPoolStats() (*PoolStats, error) {
 	return stats, nil
 }
 
-// MonitorPool starts monitoring the connection pool and logs statistics
+// MonitorPool starts monitoring the connection pool and logs statistics at specified intervals
 func MonitorPool(ctx context.Context, interval time.Duration) {
-	log := logrus.WithField("component", "db_pool_monitor")
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("Stopping pool monitoring")
 			return
 		case <-ticker.C:
 			stats, err := GetPoolStats()
 			if err != nil {
-				log.WithError(err).Error("Failed to get pool stats")
+				log.Error("Failed to get pool stats", zap.Error(err))
 				continue
 			}
 
-			log.WithFields(logrus.Fields{
-				"max_open_connections": stats.MaxOpenConnections,
-				"open_connections":     stats.OpenConnections,
-				"in_use":               stats.InUse,
-				"idle":                 stats.Idle,
-				"wait_count":           stats.WaitCount,
-				"wait_duration":        stats.WaitDuration,
-			}).Info("Connection pool statistics")
+			// Log pool statistics
+			log.Info("Database connection pool stats",
+				zap.Int("max_open_connections", stats.MaxOpenConnections),
+				zap.Int("open_connections", stats.OpenConnections),
+				zap.Int("in_use_connections", stats.InUseConnections),
+				zap.Int("idle_connections", stats.IdleConnections),
+				zap.Int64("wait_count", stats.WaitCount),
+				zap.Duration("wait_duration", stats.WaitDuration),
+			)
+
+			// Alert if pool is near capacity
+			if float64(stats.OpenConnections) > float64(stats.MaxOpenConnections)*0.8 {
+				log.Warn("Database connection pool near capacity",
+					zap.Int("open_connections", stats.OpenConnections),
+					zap.Int("max_open_connections", stats.MaxOpenConnections),
+				)
+			}
+
+			// Alert if wait time is high
+			if stats.WaitDuration > time.Second*5 {
+				log.Warn("High database connection wait time",
+					zap.Duration("wait_duration", stats.WaitDuration),
+					zap.Int64("wait_count", stats.WaitCount),
+				)
+			}
 		}
 	}
 }
 
-// InitDB initializes the database connection with retry logic and connection pooling
-func InitDB(cfg *config.Config) error {
-	log := logrus.WithField("component", "database")
+// InitDB initializes the database connection with proper connection pooling
+func InitDB(config *config.Config) error {
+	var err error
+	dsn := config.GetDSN()
 
-	// Create DSN
-	dsn := cfg.GetDSN()
-
-	// Configure GORM logger
-	gormLogger := logger.New(
-		logrus.New(),
-		logger.Config{
-			SlowThreshold:             time.Second,
-			LogLevel:                  logger.Info,
-			IgnoreRecordNotFoundError: true,
-			Colorful:                  false,
-		},
-	)
-
-	// Configure GORM
-	gormConfig := &gorm.Config{
-		Logger: gormLogger,
-		// Set connection pool settings
-		PrepareStmt: true,
+	dbInstance, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Info),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// Create exponential backoff
-	backoffConfig := backoff.NewExponentialBackOff()
-	backoffConfig.MaxElapsedTime = 30 * time.Second
-	backoffConfig.InitialInterval = 1 * time.Second
-
-	// Retry database connection
-	operation := func() error {
-		db, err := gorm.Open(postgres.Open(dsn), gormConfig)
-		if err != nil {
-			log.WithError(err).Error("Failed to connect to database")
-			return err
-		}
-
-		// Test the connection
-		sqlDB, err := db.DB()
-		if err != nil {
-			log.WithError(err).Error("Failed to get database instance")
-			return err
-		}
-
-		// Set connection pool settings
-		sqlDB.SetMaxIdleConns(10)
-		sqlDB.SetMaxOpenConns(100)
-		sqlDB.SetConnMaxLifetime(time.Hour)
-
-		// Test the connection
-		if err := sqlDB.Ping(); err != nil {
-			log.WithError(err).Error("Failed to ping database")
-			return err
-		}
-
-		dbInstance = db
-		log.Info("Successfully connected to database")
-		return nil
+	sqlDB, err := dbInstance.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get underlying *sql.DB: %w", err)
 	}
 
-	// Execute with backoff
-	if err := backoff.Retry(operation, backoffConfig); err != nil {
-		return fmt.Errorf("failed to connect to database after retries: %w", err)
+	// Set connection pool parameters
+	sqlDB.SetMaxIdleConns(25)                  // Maximum number of idle connections
+	sqlDB.SetMaxOpenConns(100)                 // Maximum number of open connections
+	sqlDB.SetConnMaxLifetime(time.Hour)        // Maximum amount of time a connection may be reused
+	sqlDB.SetConnMaxIdleTime(time.Minute * 30) // Maximum amount of time a connection may be idle
+
+	// Start connection pool monitoring
+	go MonitorPool(context.Background(), time.Minute)
+
+	// Start backup scheduler if using PostgreSQL
+	if config.Database.Driver == "postgres" {
+		backupConfig := &BackupConfig{
+			BackupDir:          "/var/backups/db",  // Default backup directory
+			RetentionPeriod:    7 * 24 * time.Hour, // 7 days
+			BackupInterval:     24 * time.Hour,     // 1 day
+			CompressionEnabled: true,
+		}
+		go StartBackupScheduler(context.Background(), backupConfig)
 	}
 
 	return nil

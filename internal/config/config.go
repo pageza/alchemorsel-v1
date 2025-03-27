@@ -51,6 +51,21 @@ type Config struct {
 	}
 }
 
+// DatabaseConfig holds database configuration settings
+type DatabaseConfig struct {
+	Driver            string        `env:"DB_DRIVER" envDefault:"postgres"`
+	Host              string        `env:"DB_HOST" envDefault:"localhost"`
+	Port              int           `env:"DB_PORT" envDefault:"5432"`
+	User              string        `env:"DB_USER" envDefault:"postgres"`
+	Password          string        `env:"DB_PASSWORD" envDefault:"postgres"`
+	DBName            string        `env:"DB_NAME" envDefault:"alchemorsel"`
+	SSLMode           string        `env:"DB_SSL_MODE" envDefault:"disable"`
+	BackupDir         string        `env:"DB_BACKUP_DIR" envDefault:"/var/backups/db"`
+	BackupRetention   time.Duration `env:"DB_BACKUP_RETENTION" envDefault:"168h"` // 7 days
+	BackupInterval    time.Duration `env:"DB_BACKUP_INTERVAL" envDefault:"24h"`   // 1 day
+	BackupCompression bool          `env:"DB_BACKUP_COMPRESSION" envDefault:"true"`
+}
+
 // NewConfig creates a new Config with default values
 func NewConfig() *Config {
 	cfg := &Config{}
@@ -159,6 +174,15 @@ func getEnvDurationOrDefault(key string, defaultValue time.Duration) time.Durati
 	return defaultValue
 }
 
+func getEnvBoolOrDefault(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolValue, err := strconv.ParseBool(value); err == nil {
+			return boolValue
+		}
+	}
+	return defaultValue
+}
+
 // LoadConfig loads environment variables from a .env file.
 func LoadConfig() error {
 	err := godotenv.Load()
@@ -176,4 +200,15 @@ func GetEnv(key, defaultValue string) string {
 		return defaultValue
 	}
 	return value
+}
+
+// GetPostgresDSN returns the PostgreSQL connection string
+func (c *DatabaseConfig) GetPostgresDSN() string {
+	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		c.Host, c.Port, c.User, c.Password, c.DBName, c.SSLMode)
+}
+
+// GetSQLiteDSN returns the SQLite connection string
+func (c *DatabaseConfig) GetSQLiteDSN() string {
+	return "alchemorsel.db"
 }
