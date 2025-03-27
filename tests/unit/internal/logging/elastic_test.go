@@ -1,10 +1,12 @@
-package logging
+package logging_test
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/pageza/alchemorsel-v1/internal/logging"
 )
 
 func TestElasticLogger(t *testing.T) {
@@ -44,7 +46,7 @@ func TestElasticLogger(t *testing.T) {
 	defer server.Close()
 
 	// Create ElasticLogger instance
-	logger, err := NewElasticLogger(server.URL, "test-index")
+	logger, err := logging.NewElasticLogger(server.URL, "test-index")
 	if err != nil {
 		t.Fatalf("Failed to create ElasticLogger: %v", err)
 	}
@@ -59,7 +61,7 @@ func TestElasticLogger(t *testing.T) {
 
 	// Test log sending
 	t.Run("SendLog", func(t *testing.T) {
-		entry := LogEntry{
+		entry := logging.LogEntry{
 			Timestamp:   time.Now(),
 			Level:       "info",
 			RequestID:   "test-request-id",
@@ -111,7 +113,7 @@ func TestElasticLoggerErrorHandling(t *testing.T) {
 	defer server.Close()
 
 	// Create ElasticLogger instance
-	logger, err := NewElasticLogger(server.URL, "test-index")
+	logger, err := logging.NewElasticLogger(server.URL, "test-index")
 	if err != nil {
 		t.Fatalf("Failed to create ElasticLogger: %v", err)
 	}
@@ -126,7 +128,7 @@ func TestElasticLoggerErrorHandling(t *testing.T) {
 
 	// Test error handling for log sending
 	t.Run("SendLogError", func(t *testing.T) {
-		entry := LogEntry{
+		entry := logging.LogEntry{
 			Timestamp:   time.Now(),
 			Level:       "info",
 			RequestID:   "test-request-id",

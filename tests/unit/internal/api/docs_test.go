@@ -1,54 +1,55 @@
-package api
+package api_test
 
 import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pageza/alchemorsel-v1/internal/api"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewAPIDocManager(t *testing.T) {
 	version := "1.0.0"
-	manager := NewAPIDocManager(version)
+	manager := api.NewAPIDocManager(version)
 
 	assert.NotNil(t, manager)
-	assert.Equal(t, version, manager.version)
-	assert.NotNil(t, manager.doc)
+	assert.Equal(t, version, manager.GetVersion())
+	assert.NotNil(t, manager.GetDoc())
 
 	// Check basic info
-	assert.Equal(t, "Alchemorsel API", manager.doc.Info.Title)
-	assert.Equal(t, "API for the Alchemorsel application", manager.doc.Info.Description)
-	assert.Equal(t, version, manager.doc.Info.Version)
-	assert.Equal(t, "Alchemorsel Team", manager.doc.Info.Contact.Name)
-	assert.Equal(t, "support@alchemorsel.com", manager.doc.Info.Contact.Email)
-	assert.Equal(t, "MIT", manager.doc.Info.License.Name)
-	assert.Equal(t, "https://opensource.org/licenses/MIT", manager.doc.Info.License.URL)
+	assert.Equal(t, "Alchemorsel API", manager.GetDoc().Info.Title)
+	assert.Equal(t, "API for the Alchemorsel application", manager.GetDoc().Info.Description)
+	assert.Equal(t, version, manager.GetDoc().Info.Version)
+	assert.Equal(t, "Alchemorsel Team", manager.GetDoc().Info.Contact.Name)
+	assert.Equal(t, "support@alchemorsel.com", manager.GetDoc().Info.Contact.Email)
+	assert.Equal(t, "MIT", manager.GetDoc().Info.License.Name)
+	assert.Equal(t, "https://opensource.org/licenses/MIT", manager.GetDoc().Info.License.URL)
 
 	// Check servers
-	assert.Len(t, manager.doc.Servers, 1)
-	assert.Equal(t, "/api/v"+version, manager.doc.Servers[0].URL)
-	assert.Equal(t, "API v"+version, manager.doc.Servers[0].Description)
+	assert.Len(t, manager.GetDoc().Servers, 1)
+	assert.Equal(t, "/api/v"+version, manager.GetDoc().Servers[0].URL)
+	assert.Equal(t, "API v"+version, manager.GetDoc().Servers[0].Description)
 
 	// Check components
-	assert.NotNil(t, manager.doc.Components.Schemas)
-	assert.NotNil(t, manager.doc.Components.SecuritySchemes)
+	assert.NotNil(t, manager.GetDoc().Components.Schemas)
+	assert.NotNil(t, manager.GetDoc().Components.SecuritySchemes)
 }
 
 func TestAddPath(t *testing.T) {
-	manager := NewAPIDocManager("1.0.0")
+	manager := api.NewAPIDocManager("1.0.0")
 
 	// Create a test path item
-	pathItem := PathItem{
-		Get: &Operation{
+	pathItem := api.PathItem{
+		Get: &api.Operation{
 			Summary:     "Get user",
 			Description: "Retrieve user information",
 			Tags:        []string{"users"},
-			Responses: map[string]Response{
+			Responses: map[string]api.Response{
 				"200": {
 					Description: "Success",
-					Content: map[string]MediaType{
+					Content: map[string]api.MediaType{
 						"application/json": {
-							Schema: Schema{
+							Schema: api.Schema{
 								Ref: "#/components/schemas/User",
 							},
 						},
@@ -63,17 +64,17 @@ func TestAddPath(t *testing.T) {
 	manager.AddPath(path, pathItem)
 
 	// Verify the path was added
-	assert.Contains(t, manager.doc.Paths, path)
-	assert.Equal(t, pathItem, manager.doc.Paths[path])
+	assert.Contains(t, manager.GetDoc().Paths, path)
+	assert.Equal(t, pathItem, manager.GetDoc().Paths[path])
 }
 
 func TestAddSchema(t *testing.T) {
-	manager := NewAPIDocManager("1.0.0")
+	manager := api.NewAPIDocManager("1.0.0")
 
 	// Create a test schema
-	schema := Schema{
+	schema := api.Schema{
 		Type: "object",
-		Properties: map[string]Schema{
+		Properties: map[string]api.Schema{
 			"id": {
 				Type:   "string",
 				Format: "uuid",
@@ -90,15 +91,15 @@ func TestAddSchema(t *testing.T) {
 	manager.AddSchema(schemaName, schema)
 
 	// Verify the schema was added
-	assert.Contains(t, manager.doc.Components.Schemas, schemaName)
-	assert.Equal(t, schema, manager.doc.Components.Schemas[schemaName])
+	assert.Contains(t, manager.GetDoc().Components.Schemas, schemaName)
+	assert.Equal(t, schema, manager.GetDoc().Components.Schemas[schemaName])
 }
 
 func TestAddSecurityScheme(t *testing.T) {
-	manager := NewAPIDocManager("1.0.0")
+	manager := api.NewAPIDocManager("1.0.0")
 
 	// Create a test security scheme
-	scheme := SecurityScheme{
+	scheme := api.SecurityScheme{
 		Type:         "http",
 		Scheme:       "bearer",
 		BearerFormat: "JWT",
@@ -110,21 +111,21 @@ func TestAddSecurityScheme(t *testing.T) {
 	manager.AddSecurityScheme(schemeName, scheme)
 
 	// Verify the security scheme was added
-	assert.Contains(t, manager.doc.Components.SecuritySchemes, schemeName)
-	assert.Equal(t, scheme, manager.doc.Components.SecuritySchemes[schemeName])
+	assert.Contains(t, manager.GetDoc().Components.SecuritySchemes, schemeName)
+	assert.Equal(t, scheme, manager.GetDoc().Components.SecuritySchemes[schemeName])
 }
 
 func TestGenerateMarkdown(t *testing.T) {
-	manager := NewAPIDocManager("1.0.0")
+	manager := api.NewAPIDocManager("1.0.0")
 
 	// Add a test path
-	pathItem := PathItem{
-		Get: &Operation{
+	pathItem := api.PathItem{
+		Get: &api.Operation{
 			Summary:     "Get user",
 			Description: "Retrieve user information",
 			Tags:        []string{"users"},
 		},
-		Post: &Operation{
+		Post: &api.Operation{
 			Summary:     "Create user",
 			Description: "Create a new user",
 			Tags:        []string{"users"},
@@ -147,7 +148,7 @@ func TestGenerateMarkdown(t *testing.T) {
 }
 
 func TestRegisterSwagger(t *testing.T) {
-	manager := NewAPIDocManager("1.0.0")
+	manager := api.NewAPIDocManager("1.0.0")
 	router := gin.New()
 
 	// Register Swagger routes

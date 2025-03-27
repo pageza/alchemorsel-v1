@@ -95,7 +95,7 @@ func NewMetricsCollector() *MetricsCollector {
 
 // ObserveHTTPRequest records metrics for an HTTP request
 func ObserveHTTPRequest(method, path string, status int, duration time.Duration) {
-	httpRequestsTotal.WithLabelValues(method, path, string(status)).Inc()
+	httpRequestsTotal.WithLabelValues(method, path, strconv.Itoa(status)).Inc()
 	httpRequestDuration.WithLabelValues(method, path).Observe(duration.Seconds())
 }
 

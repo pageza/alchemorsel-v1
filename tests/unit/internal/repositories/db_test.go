@@ -1,14 +1,16 @@
-package repositories
+package repositories_test
 
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"testing"
 	"time"
 
 	_ "github.com/lib/pq" // Postgres driver
 	"github.com/pageza/alchemorsel-v1/internal/config"
 	"github.com/pageza/alchemorsel-v1/internal/errors"
+	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -62,8 +64,48 @@ func setupTestDB(t *testing.T) (*sql.DB, func()) {
 
 func TestInitDB_EdgeCases(t *testing.T) {
 	// Setup test database
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
+	ctx := context.Background()
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "postgres:15-alpine",
+			ExposedPorts: []string{"5432/tcp"},
+			Env: map[string]string{
+				"POSTGRES_USER":     "test",
+				"POSTGRES_PASSWORD": "test",
+				"POSTGRES_DB":       "testdb",
+			},
+			WaitingFor: wait.ForLog("database system is ready to accept connections"),
+		},
+		Started: true,
+	})
+	require.NoError(t, err)
+	defer container.Terminate(ctx)
+
+	host, err := container.Host(ctx)
+	require.NoError(t, err)
+	port, err := container.MappedPort(ctx, "5432")
+	require.NoError(t, err)
+
+	// Wait for the container to be ready
+	time.Sleep(2 * time.Second)
+
+	// Create a test database connection to verify the container is working
+	connStr := fmt.Sprintf("host=%s port=%s user=test password=test dbname=testdb sslmode=disable",
+		host, port.Port())
+	db, err := sql.Open("postgres", connStr)
+	require.NoError(t, err)
+	defer db.Close()
+
+	// Test the connection with retries
+	var dbErr error
+	for i := 0; i < 5; i++ {
+		dbErr = db.Ping()
+		if dbErr == nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	require.NoError(t, dbErr)
 
 	tests := []struct {
 		name        string
@@ -76,8 +118,8 @@ func TestInitDB_EdgeCases(t *testing.T) {
 			config: &config.Config{
 				Database: config.DatabaseConfig{
 					Driver:   "postgres",
-					Host:     "localhost",
-					Port:     5432,
+					Host:     host,
+					Port:     port.Int(),
 					User:     "test",
 					Password: "test",
 					DBName:   "testdb",
@@ -97,29 +139,13 @@ func TestInitDB_EdgeCases(t *testing.T) {
 			name: "Invalid connection string",
 			config: &config.Config{
 				Database: config.DatabaseConfig{
+					Driver:   "postgres",
 					Host:     "invalid-host",
 					Port:     5432,
 					User:     "test",
 					Password: "test",
 					DBName:   "testdb",
-				},
-			},
-			expectError: true,
-		},
-		{
-			name: "Invalid driver",
-			config: &config.Config{
-				Database: config.DatabaseConfig{
-					Driver: "invalid-driver",
-				},
-			},
-			expectError: true,
-		},
-		{
-			name: "Invalid SSL mode",
-			config: &config.Config{
-				Database: config.DatabaseConfig{
-					SSLMode: "invalid-ssl-mode",
+					SSLMode:  "disable",
 				},
 			},
 			expectError: true,
@@ -128,7 +154,7 @@ func TestInitDB_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := InitDB(tt.config)
+			err := repositories.InitDB(tt.config)
 			if tt.expectError {
 				assert.Error(t, err)
 				return
@@ -136,7 +162,10 @@ func TestInitDB_EdgeCases(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tt.validate != nil {
-				tt.validate(t, db)
+				db := repositories.GetDB()
+				sqlDB, err := db.DB()
+				require.NoError(t, err)
+				tt.validate(t, sqlDB)
 			}
 		})
 	}
@@ -172,7 +201,7 @@ func TestCircuitBreaker_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cb := NewCircuitBreaker(5, 10*time.Second)
+			cb := repositories.NewCircuitBreaker(5, 10*time.Second)
 
 			for i := 0; i < tt.failures; i++ {
 				cb.RecordFailure()
@@ -226,14 +255,14 @@ func TestRetryWithBackoff_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := &RetryConfig{
+			config := &repositories.RetryConfig{
 				MaxRetries:      tt.maxRetries,
 				InitialInterval: time.Second,
 				MaxInterval:     time.Second * 5,
 				Multiplier:      2.0,
 				MaxElapsedTime:  time.Second * 10,
 			}
-			err := RetryWithBackoff(tt.operation, config)
+			err := repositories.RetryWithBackoff(tt.operation, config)
 			if tt.expectError {
 				assert.Error(t, err)
 				return

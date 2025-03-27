@@ -1,6 +1,8 @@
-package security
+package security_test
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -8,12 +10,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/pageza/alchemorsel-v1/internal/security"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 )
 
-func setupTest(_ *testing.T) (*SecurityManager, *gin.Engine) {
-	config := SecurityConfig{
+func setupTest(_ *testing.T) (*security.SecurityManager, *gin.Engine) {
+	config := security.SecurityConfig{
 		JWTSecret:          "test-secret",
 		JWTExpirationHours: 24,
 		APIKeyRotationDays: 30,
@@ -31,7 +34,7 @@ func setupTest(_ *testing.T) (*SecurityManager, *gin.Engine) {
 		Addr: "localhost:6379",
 	})
 
-	sm := NewSecurityManager(config, redisClient)
+	sm := security.NewSecurityManager(config, redisClient)
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
@@ -155,7 +158,7 @@ func TestAuthentication(t *testing.T) {
 	sm, _ := setupTest(t)
 
 	t.Run("generate and validate token", func(t *testing.T) {
-		user := &User{
+		user := &security.User{
 			ID:       "test-user",
 			Username: "testuser",
 			Roles:    []string{"user"},
@@ -173,7 +176,12 @@ func TestAuthentication(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, user.ID, claims["user_id"])
 		assert.Equal(t, user.Username, claims["username"])
-		assert.Equal(t, user.Roles, claims["roles"])
+
+		// Convert interface{} to []string for comparison
+		roles, ok := claims["roles"].([]interface{})
+		assert.True(t, ok)
+		assert.Len(t, roles, 1)
+		assert.Equal(t, "user", roles[0].(string))
 	})
 
 	t.Run("invalid token", func(t *testing.T) {
@@ -191,7 +199,7 @@ func TestAuthorization(t *testing.T) {
 	})
 
 	t.Run("authorized access", func(t *testing.T) {
-		user := &User{
+		user := &security.User{
 			ID:       "test-user",
 			Username: "testuser",
 			Roles:    []string{"admin"},
@@ -207,7 +215,7 @@ func TestAuthorization(t *testing.T) {
 	})
 
 	t.Run("unauthorized access", func(t *testing.T) {
-		user := &User{
+		user := &security.User{
 			ID:       "test-user",
 			Username: "testuser",
 			Roles:    []string{"user"},
@@ -234,7 +242,7 @@ func TestOutputEncoding(t *testing.T) {
 		{
 			name:     "encode HTML",
 			input:    "<script>alert('xss')</script>",
-			expected: "&lt;script&gt;alert('xss')&lt;/script&gt;",
+			expected: "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;",
 		},
 		{
 			name:     "no encoding needed",
@@ -286,17 +294,66 @@ func TestRateLimiting(t *testing.T) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	// Test rate limit
-	for i := 0; i < sm.config.RateLimitRequests+1; i++ {
+	// Test rate limiting with Redis disabled (should allow all requests)
+	t.Run("rate limiting with Redis disabled", func(t *testing.T) {
+		sm.DisableRedis()
+		for i := 0; i < 10; i++ {
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/test", nil)
+			req.RemoteAddr = "127.0.0.1"
+			router.ServeHTTP(w, req)
+			assert.Equal(t, 200, w.Code)
+		}
+	})
+
+	// Test rate limiting with Redis enabled
+	t.Run("rate limiting with Redis enabled", func(t *testing.T) {
+		// Create a Redis client for testing
+		redisClient := redis.NewClient(&redis.Options{
+			Addr: "localhost:6379",
+			DB:   1, // Use a different DB for testing
+		})
+
+		// Test Redis connection
+		ctx := context.Background()
+		_, err := redisClient.Ping(ctx).Result()
+		if err != nil {
+			t.Skip("Redis not available, skipping rate limit test")
+		}
+
+		sm.SetRedisClient(redisClient)
+		defer redisClient.Close()
+
+		// Clear any existing rate limit data
+		redisClient.FlushDB(ctx)
+
+		// Set a lower rate limit for testing
+		sm.SetRateLimitConfig(5, time.Second*10)
+
+		// Make requests up to the limit
+		rateLimitConfig := sm.GetRateLimitConfig()
+		for i := 0; i < rateLimitConfig.Requests; i++ {
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/test", nil)
+			req.RemoteAddr = "127.0.0.1"
+			router.ServeHTTP(w, req)
+			assert.Equal(t, 200, w.Code, "Request %d should succeed", i+1)
+		}
+
+		// Wait a moment to ensure rate limit is enforced
+		time.Sleep(time.Millisecond * 100)
+
+		// Next request should be rate limited
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("GET", "/test", nil)
 		req.RemoteAddr = "127.0.0.1"
 		router.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusTooManyRequests, w.Code, "Request should be rate limited")
 
-		if i >= sm.config.RateLimitRequests {
-			assert.Equal(t, 429, w.Code)
-		} else {
-			assert.Equal(t, 200, w.Code)
-		}
-	}
+		// Verify the response body
+		var response map[string]string
+		err = json.NewDecoder(w.Body).Decode(&response)
+		assert.NoError(t, err)
+		assert.Equal(t, "rate limit exceeded", response["error"])
+	})
 }

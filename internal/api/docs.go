@@ -191,7 +191,12 @@ func (m *APIDocManager) AddSecurityScheme(name string, scheme SecurityScheme) {
 	m.doc.Components.SecuritySchemes[name] = scheme
 }
 
-// GetDoc returns the API documentation
+// GetVersion returns the API version
+func (m *APIDocManager) GetVersion() string {
+	return m.version
+}
+
+// GetDoc returns the OpenAPI documentation
 func (m *APIDocManager) GetDoc() *APIDoc {
 	return m.doc
 }

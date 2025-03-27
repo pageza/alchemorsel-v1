@@ -1,4 +1,4 @@
-package config
+package config_test
 
 import (
 	"encoding/json"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pageza/alchemorsel-v1/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,14 +21,14 @@ func TestConfigManager(t *testing.T) {
 	encryptionKey := "0123456789abcdef0123456789abcdef"
 
 	// Initialize ConfigManager
-	cm, err := NewConfigManager(encryptionKey, backupDir, auditLogFile)
+	cm, err := config.NewConfigManager(encryptionKey, backupDir, auditLogFile)
 	require.NoError(t, err)
 	require.NotNil(t, cm)
 
 	// Create a test configuration
-	testConfig := &Config{
-		Environment: Development,
-		Database: DatabaseConfig{
+	testConfig := &config.Config{
+		Environment: config.Development,
+		Database: config.DatabaseConfig{
 			Driver:   "postgres",
 			Host:     "localhost",
 			Port:     5432,
@@ -114,7 +115,7 @@ func TestConfigManager(t *testing.T) {
 
 	t.Run("Error Cases", func(t *testing.T) {
 		// Test invalid encryption key
-		_, err := NewConfigManager("invalid-key", backupDir, auditLogFile)
+		_, err := config.NewConfigManager("invalid-key", backupDir, auditLogFile)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "encryption key must be 32 bytes")
 
@@ -124,7 +125,7 @@ func TestConfigManager(t *testing.T) {
 		assert.Contains(t, err.Error(), "failed to read backup file")
 
 		// Test invalid audit log file
-		invalidCM, _ := NewConfigManager(encryptionKey, backupDir, "/invalid/path/audit.log")
+		invalidCM, _ := config.NewConfigManager(encryptionKey, backupDir, "/invalid/path/audit.log")
 		err = invalidCM.LogAudit("test", "test", "test", []string{"test"})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to write audit log file")
@@ -133,7 +134,7 @@ func TestConfigManager(t *testing.T) {
 
 func TestConfigVersion(t *testing.T) {
 	// Create a test version
-	version := ConfigVersion{
+	version := config.ConfigVersion{
 		Version:     "test-version",
 		Timestamp:   time.Now(),
 		Environment: "test",
@@ -147,7 +148,7 @@ func TestConfigVersion(t *testing.T) {
 	require.NotNil(t, data)
 
 	// Test JSON unmarshaling
-	var unmarshaled ConfigVersion
+	var unmarshaled config.ConfigVersion
 	err = json.Unmarshal(data, &unmarshaled)
 	require.NoError(t, err)
 	assert.Equal(t, version.Version, unmarshaled.Version)
@@ -158,7 +159,7 @@ func TestConfigVersion(t *testing.T) {
 
 func TestConfigAuditLog(t *testing.T) {
 	// Create a test audit log
-	auditLog := ConfigAuditLog{
+	auditLog := config.ConfigAuditLog{
 		ID:          "test-id",
 		Timestamp:   time.Now(),
 		Action:      "test-action",
@@ -174,7 +175,7 @@ func TestConfigAuditLog(t *testing.T) {
 	require.NotNil(t, data)
 
 	// Test JSON unmarshaling
-	var unmarshaled ConfigAuditLog
+	var unmarshaled config.ConfigAuditLog
 	err = json.Unmarshal(data, &unmarshaled)
 	require.NoError(t, err)
 	assert.Equal(t, auditLog.ID, unmarshaled.ID)

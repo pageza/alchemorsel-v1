@@ -1,0 +1,367 @@
+{
+  "info": {
+    "name": "Recipe Endpoints",
+    "description": "Collection for testing recipe-related endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Recipe",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"title\": \"Test Recipe\",\n    \"description\": \"A test recipe for API testing\",\n    \"ingredients\": [\n        {\n            \"name\": \"Ingredient 1\",\n            \"amount\": \"100g\",\n            \"unit\": \"grams\"\n        }\n    ],\n    \"instructions\": [\n        \"Step 1: Do something\",\n        \"Step 2: Do something else\"\n    ],\n    \"cooking_time\": 30,\n    \"difficulty\": \"medium\",\n    \"servings\": 4,\n    \"tags\": [\"test\", \"api\"]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/recipes",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "recipes"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test(\"Recipe created successfully\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('id');",
+              "    pm.expect(response.title).to.equal('Test Recipe');",
+              "    pm.expect(response.ingredients).to.be.an('array');",
+              "    pm.expect(response.instructions).to.be.an('array');",
+              "    pm.expect(response.tags).to.be.an('array');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Recipe",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/recipes/{{recipe_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "recipes", "{{recipe_id}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Recipe retrieved successfully\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('id');",
+              "    pm.expect(response).to.have.property('title');",
+              "    pm.expect(response).to.have.property('description');",
+              "    pm.expect(response).to.have.property('ingredients');",
+              "    pm.expect(response).to.have.property('instructions');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Update Recipe",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"title\": \"Updated Test Recipe\",\n    \"description\": \"An updated test recipe\",\n    \"ingredients\": [\n        {\n            \"name\": \"Updated Ingredient\",\n            \"amount\": \"200g\",\n            \"unit\": \"grams\"\n        }\n    ],\n    \"instructions\": [\n        \"Updated Step 1\",\n        \"Updated Step 2\"\n    ],\n    \"cooking_time\": 45,\n    \"difficulty\": \"hard\",\n    \"servings\": 6,\n    \"tags\": [\"test\", \"api\", \"updated\"]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/recipes/{{recipe_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "recipes", "{{recipe_id}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Recipe updated successfully\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response.title).to.equal('Updated Test Recipe');",
+              "    pm.expect(response.description).to.equal('An updated test recipe');",
+              "    pm.expect(response.cooking_time).to.equal(45);",
+              "    pm.expect(response.difficulty).to.equal('hard');",
+              "    pm.expect(response.servings).to.equal(6);",
+              "    pm.expect(response.tags).to.include('updated');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delete Recipe",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/recipes/{{recipe_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "recipes", "{{recipe_id}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 204\", function () {",
+              "    pm.response.to.have.status(204);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "List Recipes",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/recipes?page=1&limit=10&sort=created_at&order=desc",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "recipes"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "10"
+            },
+            {
+              "key": "sort",
+              "value": "created_at"
+            },
+            {
+              "key": "order",
+              "value": "desc"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Recipes retrieved successfully\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('recipes');",
+              "    pm.expect(response.recipes).to.be.an('array');",
+              "    pm.expect(response).to.have.property('total');",
+              "    pm.expect(response).to.have.property('page');",
+              "    pm.expect(response).to.have.property('limit');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search Recipes",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/recipes/search?q=test&tags=api&difficulty=medium",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "recipes", "search"],
+          "query": [
+            {
+              "key": "q",
+              "value": "test"
+            },
+            {
+              "key": "tags",
+              "value": "api"
+            },
+            {
+              "key": "difficulty",
+              "value": "medium"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Search results retrieved successfully\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('recipes');",
+              "    pm.expect(response.recipes).to.be.an('array');",
+              "    pm.expect(response).to.have.property('total');",
+              "    pm.expect(response).to.have.property('page');",
+              "    pm.expect(response).to.have.property('limit');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rate Recipe",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"rating\": 5,\n    \"comment\": \"Great recipe!\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/recipes/{{recipe_id}}/rate",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "recipes", "{{recipe_id}}", "rate"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Recipe rated successfully\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('message');",
+              "    pm.expect(response.message).to.include('rated');",
+              "    pm.expect(response).to.have.property('rating');",
+              "    pm.expect(response.rating).to.equal(5);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Recipe Ratings",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/recipes/{{recipe_id}}/ratings",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "recipes", "{{recipe_id}}", "ratings"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Recipe ratings retrieved successfully\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('ratings');",
+              "    pm.expect(response.ratings).to.be.an('array');",
+              "    pm.expect(response).to.have.property('average_rating');",
+              "    pm.expect(response).to.have.property('total_ratings');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+} 

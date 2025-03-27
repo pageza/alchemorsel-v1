@@ -204,7 +204,7 @@ func (sm *SecurityManager) RequireRole(roles ...string) gin.HandlerFunc {
 		hasRole := false
 		for _, role := range roles {
 			for _, userRole := range userRoles {
-				if role == userRole.(string) {
+				if roleStr, ok := userRole.(string); ok && role == roleStr {
 					hasRole = true
 					break
 				}
@@ -226,7 +226,16 @@ func (sm *SecurityManager) RequireRole(roles ...string) gin.HandlerFunc {
 
 // Output Encoding
 func (sm *SecurityManager) EncodeOutput(input string) string {
-	return strings.ReplaceAll(input, "<", "&lt;")
+	// First encode ampersands to prevent double encoding
+	input = strings.ReplaceAll(input, "&", "&amp;")
+
+	// Then encode other special characters
+	input = strings.ReplaceAll(input, "<", "&lt;")
+	input = strings.ReplaceAll(input, ">", "&gt;")
+	input = strings.ReplaceAll(input, "\"", "&quot;")
+	input = strings.ReplaceAll(input, "'", "&#39;")
+
+	return input
 }
 
 // Security Headers Middleware
@@ -246,23 +255,47 @@ func (sm *SecurityManager) SecurityHeadersMiddleware() gin.HandlerFunc {
 // Rate Limiting
 func (sm *SecurityManager) RateLimitMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// If Redis is not available, allow the request
+		if sm.redis == nil {
+			c.Next()
+			return
+		}
+
 		ip := c.ClientIP()
 		key := fmt.Sprintf("rate_limit:%s", ip)
+		ctx := c.Request.Context()
 
-		count, err := sm.redis.Incr(c, key).Result()
+		// Get current count
+		count, err := sm.redis.Get(ctx, key).Int()
+		if err == redis.Nil {
+			// Key doesn't exist, set it with initial count and expiration
+			err = sm.redis.SetEx(ctx, key, 1, sm.config.RateLimitWindow).Err()
+			if err != nil {
+				c.Next() // On Redis error, allow the request
+				return
+			}
+			c.Next()
+			return
+		}
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "rate limit error"})
+			c.Next() // On Redis error, allow the request
+			return
+		}
+
+		// Check if rate limit exceeded
+		if count >= sm.config.RateLimitRequests {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded"})
 			c.Abort()
 			return
 		}
 
-		if count == 1 {
-			sm.redis.Expire(c, key, sm.config.RateLimitWindow)
-		}
-
-		if count > int64(sm.config.RateLimitRequests) {
-			c.JSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded"})
-			c.Abort()
+		// Increment count using INCR
+		pipe := sm.redis.Pipeline()
+		pipe.Incr(ctx, key)
+		pipe.Expire(ctx, key, sm.config.RateLimitWindow) // Reset expiration on increment
+		_, err = pipe.Exec(ctx)
+		if err != nil {
+			c.Next() // On Redis error, allow the request
 			return
 		}
 
@@ -283,4 +316,34 @@ func (sm *SecurityManager) LogSecurityEvent(event SecurityEvent) error {
 	// Implement security event logging
 	// This could send events to a security monitoring service
 	return nil
+}
+
+// DisableRedis disables Redis for testing purposes
+func (sm *SecurityManager) DisableRedis() {
+	sm.redis = nil
+}
+
+// SetRedisClient sets the Redis client for testing purposes
+func (sm *SecurityManager) SetRedisClient(client *redis.Client) {
+	sm.redis = client
+}
+
+// RateLimitConfig represents the rate limiting configuration
+type RateLimitConfig struct {
+	Requests int
+	Window   time.Duration
+}
+
+// SetRateLimitConfig sets the rate limit configuration
+func (sm *SecurityManager) SetRateLimitConfig(requests int, window time.Duration) {
+	sm.config.RateLimitRequests = requests
+	sm.config.RateLimitWindow = window
+}
+
+// GetRateLimitConfig returns the current rate limit configuration
+func (sm *SecurityManager) GetRateLimitConfig() RateLimitConfig {
+	return RateLimitConfig{
+		Requests: sm.config.RateLimitRequests,
+		Window:   sm.config.RateLimitWindow,
+	}
 }
