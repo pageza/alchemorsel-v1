@@ -19,8 +19,11 @@ jobs:
       POSTGRES_PORT: ${{vars.POSTGRES_PORT}}
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Create dummy .env file
+        run: touch .env
 
       - name: Set up Go
         uses: actions/setup-go@v4
