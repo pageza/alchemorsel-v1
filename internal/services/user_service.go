@@ -3,20 +3,13 @@ package services
 import (
 	"context"
 	"fmt"
-	"os"
-	"strconv"
-	"strings"
+	"math/rand"
 	"time"
+
+	"encoding/hex"
 
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
-	"github.com/pageza/alchemorsel-v1/internal/utils"
-
-	stdErrors "errors"
-
-	"github.com/golang-jwt/jwt/v4"
-	appErrors "github.com/pageza/alchemorsel-v1/internal/errors"
-	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -27,18 +20,42 @@ type UserServiceInterface interface {
 	GetUser(ctx context.Context, id string) (*models.User, error)
 	UpdateUser(ctx context.Context, id string, user *models.User) error
 	DeleteUser(ctx context.Context, id string) error
-	GetAllUsers(ctx context.Context) ([]*models.User, error)
-	DeactivateUser(ctx context.Context, id string) error
-	PatchUser(ctx context.Context, id string, patchData map[string]interface{}) error
+	GetUserByEmail(ctx context.Context, email string) (*models.User, error)
 	ForgotPassword(ctx context.Context, email string) error
-	ResetPassword(ctx context.Context, token, newPassword string) error
+	ResetPassword(ctx context.Context, token string, newPassword string) error
+	PatchUser(ctx context.Context, id string, updates map[string]interface{}) error
+	GetAllUsers(ctx context.Context) ([]*models.User, error)
 }
 
-// DefaultUserService is the default implementation of UserServiceInterface.
-type DefaultUserService struct{}
+// UserService is the implementation of UserServiceInterface.
+type UserService struct {
+	repo repositories.UserRepository
+}
 
-func (s *DefaultUserService) Authenticate(ctx context.Context, email string, password string) (*models.User, error) {
-	user, err := repositories.GetUserByEmail(ctx, email)
+func NewUserService(repo repositories.UserRepository) *UserService {
+	return &UserService{repo: repo}
+}
+
+// Helper methods
+func (s *UserService) validateUser(user *models.User) error {
+	if user == nil {
+		return fmt.Errorf("user cannot be nil")
+	}
+	if user.Email == "" {
+		return fmt.Errorf("email is required")
+	}
+	if user.Password == "" {
+		return fmt.Errorf("password is required")
+	}
+	if len(user.Password) < 8 {
+		return fmt.Errorf("password must be at least 8 characters")
+	}
+	return nil
+}
+
+// Service methods
+func (s *UserService) Authenticate(ctx context.Context, email string, password string) (*models.User, error) {
+	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {
 		return nil, err
 	}
@@ -51,264 +68,139 @@ func (s *DefaultUserService) Authenticate(ctx context.Context, email string, pas
 	return user, nil
 }
 
-func (s *DefaultUserService) CreateUser(ctx context.Context, user *models.User) error {
-	return CreateUser(ctx, user)
-}
+func (s *UserService) CreateUser(ctx context.Context, user *models.User) error {
+	if err := s.validateUser(user); err != nil {
+		return err
+	}
 
-func (s *DefaultUserService) GetUser(ctx context.Context, id string) (*models.User, error) {
-	return GetUser(ctx, id)
-}
-
-func (s *DefaultUserService) UpdateUser(ctx context.Context, id string, user *models.User) error {
-	return UpdateUser(ctx, id, user)
-}
-
-func (s *DefaultUserService) DeleteUser(ctx context.Context, id string) error {
-	return DeleteUser(ctx, id)
-}
-
-func (s *DefaultUserService) GetAllUsers(ctx context.Context) ([]*models.User, error) {
-	return GetAllUsers(ctx)
-}
-
-func (s *DefaultUserService) DeactivateUser(ctx context.Context, id string) error {
-	return DeactivateUser(ctx, id)
-}
-
-func (s *DefaultUserService) PatchUser(ctx context.Context, id string, patchData map[string]interface{}) error {
-	return PatchUser(ctx, id, patchData)
-}
-
-func (s *DefaultUserService) ForgotPassword(ctx context.Context, email string) error {
-	return ForgotPassword(ctx, email)
-}
-
-func (s *DefaultUserService) ResetPassword(ctx context.Context, token, newPassword string) error {
-	return ResetPassword(ctx, token, newPassword)
-}
-
-// CreateUser registers a new user.
-// It checks for duplicates, hashes the password, and returns an error if any issue occurs.
-func CreateUser(ctx context.Context, user *models.User) error {
-	// Check if a user with the given email already exists.
-	existingUser, err := repositories.GetUserByEmail(ctx, user.Email)
+	// Check if user exists
+	existingUser, err := s.repo.GetUserByEmail(ctx, user.Email)
 	if err != nil {
-		// If error message indicates user not found, treat it as not existing.
-		if err.Error() == "user not found" {
-			existingUser = nil
-		} else {
-			return err
-		}
+		return err
 	}
 	if existingUser != nil {
-		return fmt.Errorf("UNIQUE constraint failed: users.email")
+		return fmt.Errorf("user with email %s already exists", user.Email)
 	}
 
-	// Hash the user's password.
+	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 	user.Password = string(hashedPassword)
 
-	// Create the user in the database.
-	return repositories.CreateUser(ctx, user)
+	return s.repo.CreateUser(ctx, user)
 }
 
-// GetUser retrieves a user by ID.
-func GetUser(ctx context.Context, id string) (*models.User, error) {
-	user, err := repositories.GetUser(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if user == nil {
-		return nil, fmt.Errorf("user with id %s not found", id)
-	}
-	// Omit password for security.
-	user.Password = ""
-	return user, nil
+func (s *UserService) GetUser(ctx context.Context, id string) (*models.User, error) {
+	return s.repo.GetUser(ctx, id)
 }
 
-// UpdateUser updates an existing user.
-func UpdateUser(ctx context.Context, id string, user *models.User) error {
-	// Retrieve the existing user.
-	existingUser, err := repositories.GetUser(ctx, id)
-	if err != nil {
+func (s *UserService) UpdateUser(ctx context.Context, id string, user *models.User) error {
+	if err := s.validateUser(user); err != nil {
 		return err
 	}
-	if existingUser == nil {
-		return fmt.Errorf("user not found")
-	}
-
-	// No need to check for deactivation explicitly; soft-deleted records are excluded.
-
-	// Update allowed fields if provided.
-	if user.Name != "" {
-		existingUser.Name = user.Name
-	}
-	if user.Email != "" {
-		existingUser.Email = strings.ToLower(strings.TrimSpace(user.Email))
-	}
-
-	return repositories.UpdateUser(ctx, id, existingUser)
+	return s.repo.UpdateUser(ctx, user)
 }
 
-// DeleteUser deletes a user by ID.
-func DeleteUser(ctx context.Context, id string) error {
-	// Soft delete the user by marking them as inactive.
-	return repositories.DeactivateUser(ctx, id)
+func (s *UserService) DeleteUser(ctx context.Context, id string) error {
+	return s.repo.DeleteUser(ctx, id)
 }
 
-// LoginUser authenticates a user using email and password.
-// If authentication succeeds, it returns a signed JWT token.
-func LoginUser(ctx context.Context, req *models.LoginRequest) (string, error) {
-	// Lookup the user by email.
-	user, err := repositories.GetUserByEmail(ctx, req.Email)
-	if err != nil {
-		return "", err
-	}
-	if user == nil {
-		return "", fmt.Errorf("invalid credentials")
-	}
-
-	// Validate the password.
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return "", fmt.Errorf("invalid credentials")
-	}
-
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		return "", fmt.Errorf("JWT secret is not set")
-	}
-
-	// Build a JWT token with the user's ID and an expiration.
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"id":  user.ID,
-		"exp": time.Now().Add(time.Hour).Unix(),
-	})
-	tokenString, err := token.SignedString([]byte(secret))
-	if err != nil {
-		return "", err
-	}
-	return tokenString, nil
+func (s *UserService) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	return s.repo.GetUserByEmail(ctx, email)
 }
 
-// GetAllUsers returns a slice of all users.
-func GetAllUsers(ctx context.Context) ([]*models.User, error) {
-	users, err := repositories.GetAllUsers(ctx)
-	if err != nil {
-		return nil, err
-	}
-	// Sanitize sensitive fields.
-	for _, u := range users {
-		u.Password = ""
-	}
-	return users, nil
-}
-
-// DeactivateUser marks a user as inactive (soft delete).
-func DeactivateUser(ctx context.Context, id string) error {
-	return repositories.DeactivateUser(ctx, id)
-}
-
-// PatchUser performs a partial update on a user allowing only permitted fields (e.g., name and email).
-func PatchUser(ctx context.Context, id string, patchData map[string]interface{}) error {
-	user, err := GetUser(ctx, id)
+// ForgotPassword initiates the password reset process
+func (s *UserService) ForgotPassword(ctx context.Context, email string) error {
+	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {
 		return err
 	}
 	if user == nil {
-		return appErrors.ErrUserNotFound
+		// Don't reveal if email exists
+		return nil
 	}
 
-	// Allow updates only on specific fields.
-	if name, ok := patchData["name"]; ok {
-		if str, ok := name.(string); ok {
-			user.Name = strings.TrimSpace(str)
-		}
-	}
-	if email, ok := patchData["email"]; ok {
-		if str, ok := email.(string); ok {
-			user.Email = strings.ToLower(strings.TrimSpace(str))
-		}
-	}
-
-	// Reuse the existing UpdateUser function to persist changes.
-	return UpdateUser(ctx, id, user)
-}
-
-// GetUserByEmailVerificationToken retrieves a user by token and checks expiration.
-func GetUserByEmailVerificationToken(ctx context.Context, token string) (*models.User, error) {
-	user, err := repositories.GetUserByEmailVerificationToken(ctx, token)
-	if err != nil {
-		return nil, err
-	}
-	if user == nil {
-		return nil, nil
-	}
-	if user.EmailVerificationExpires != nil && user.EmailVerificationExpires.Before(time.Now()) {
-		return nil, nil
-	}
-	return user, nil
-}
-
-// ForgotPassword generates a reset token for the user.
-func ForgotPassword(ctx context.Context, email string) error {
-	user, err := repositories.GetUserByEmail(ctx, email)
-	if err != nil {
-		return err
-	}
-	if user == nil {
-		return stdErrors.New("user not found")
-	}
-	// Generate reset token using secure token generation.
-	resetToken, err := utils.GenerateSecureToken(16)
-	if err != nil {
-		zap.L().Error("failed to generate secure reset token", zap.Error(err))
-		return fmt.Errorf("failed to generate secure reset token: %w", err)
-	}
-	expiry := time.Now().Add(1 * time.Hour)
-	if expStr := os.Getenv("PASSWORD_RESET_TOKEN_EXPIRY"); expStr != "" {
-		if d, err := time.ParseDuration(expStr); err == nil {
-			expiry = time.Now().Add(d)
-		}
-	}
-	user.ResetPasswordToken = resetToken
+	// Generate reset token
+	token := generateResetToken()
+	user.ResetPasswordToken = token
+	expiry := time.Now().Add(24 * time.Hour)
 	user.ResetPasswordExpires = &expiry
-	zap.L().Info("Password reset token generated", zap.String("userID", user.ID))
-	return repositories.UpdateUser(ctx, user.ID, user)
+
+	return s.repo.UpdateUser(ctx, user)
 }
 
-// ResetPassword updates the user's password using the provided token.
-func ResetPassword(ctx context.Context, token, newPassword string) error {
-	user, err := repositories.GetUserByResetPasswordToken(ctx, token)
-	if err != nil || user == nil {
-		return stdErrors.New("invalid or expired reset token")
-	}
-	if user.ResetPasswordExpires == nil || user.ResetPasswordExpires.Before(time.Now()) {
-		return stdErrors.New("reset token expired")
-	}
-	if err := utils.ValidatePassword(newPassword); err != nil {
-		return fmt.Errorf("password validation failed: %w", err)
-	}
-	cost := bcrypt.DefaultCost
-	if costStr := os.Getenv("BCRYPT_COST"); costStr != "" {
-		if parsedCost, err := strconv.Atoi(costStr); err == nil {
-			cost = parsedCost
-		}
-	}
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), cost)
+// ResetPassword completes the password reset process
+func (s *UserService) ResetPassword(ctx context.Context, token string, newPassword string) error {
+	user, err := s.repo.GetUserByResetPasswordToken(ctx, token)
 	if err != nil {
-		return fmt.Errorf("failed to hash new password: %w", err)
+		return err
 	}
+	if user == nil {
+		return fmt.Errorf("invalid or expired reset token")
+	}
+
+	if time.Now().After(*user.ResetPasswordExpires) {
+		return fmt.Errorf("reset token has expired")
+	}
+
+	// Hash new password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
 	user.Password = string(hashedPassword)
 	user.ResetPasswordToken = ""
 	user.ResetPasswordExpires = nil
-	zap.L().Info("Password reset successfully", zap.String("userID", user.ID))
-	return repositories.UpdateUser(ctx, user.ID, user)
+
+	return s.repo.UpdateUser(ctx, user)
 }
 
-// GetUserByEmail retrieves a user by email.
-func GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
-	return repositories.GetUserByEmail(ctx, email)
+// PatchUser updates specific fields of a user
+func (s *UserService) PatchUser(ctx context.Context, id string, updates map[string]interface{}) error {
+	user, err := s.repo.GetUser(ctx, id)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return fmt.Errorf("user not found")
+	}
+
+	// Update fields
+	for field, value := range updates {
+		switch field {
+		case "email":
+			if email, ok := value.(string); ok {
+				user.Email = email
+			}
+		case "name":
+			if name, ok := value.(string); ok {
+				user.Name = name
+			}
+		case "password":
+			if password, ok := value.(string); ok {
+				hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+				if err != nil {
+					return err
+				}
+				user.Password = string(hashedPassword)
+			}
+		}
+	}
+
+	return s.repo.UpdateUser(ctx, user)
+}
+
+// GetAllUsers retrieves all users
+func (s *UserService) GetAllUsers(ctx context.Context) ([]*models.User, error) {
+	return s.repo.GetAllUsers(ctx)
+}
+
+// Helper function to generate reset token
+func generateResetToken() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }

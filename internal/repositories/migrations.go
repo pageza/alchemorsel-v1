@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -20,11 +19,6 @@ var DB *gorm.DB
 func InitializeDB(dsn string) error {
 	// If the repositories DB is already initialized, return immediately.
 	if DB != nil {
-		return nil
-	}
-	// If the global db connection is already initialized, use it.
-	if db.DB != nil {
-		DB = db.DB
 		return nil
 	}
 
@@ -87,4 +81,11 @@ func AutoMigrate() error {
 // This helper is used for test and integration setup.
 func ClearUsers() error {
 	return DB.Exec("DELETE FROM users").Error
+}
+
+func RunMigrations(db *gorm.DB) error {
+	return db.AutoMigrate(
+		&models.User{},
+		&models.Recipe{},
+	)
 }

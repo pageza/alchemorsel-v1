@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/routes" // using the existing routes configuration
 	"github.com/stretchr/testify/assert"
 )
@@ -47,7 +48,15 @@ func TestIntegrationListRecipes(t *testing.T) {
 
 // TestIntegrationGetRecipe creates a recipe then retrieves it by ID.
 func TestIntegrationGetRecipe(t *testing.T) {
-	router := routes.SetupRouter()
+	// Initialize the database
+	config := db.NewConfig()
+	database, err := db.InitDB(config)
+	if err != nil {
+		t.Fatalf("Failed to initialize DB: %v", err)
+	}
+
+	// Initialize the router with the database
+	router := routes.SetupRouter(database)
 
 	// Create a recipe
 	postBody := `{"title": "Integration Test Recipe Get", "ingredients": ["ing"], "steps": ["s"], "approved": true}`
@@ -61,7 +70,7 @@ func TestIntegrationGetRecipe(t *testing.T) {
 		ID    string `json:"id"`
 		Title string `json:"title"`
 	}
-	err := json.Unmarshal(createResp.Body.Bytes(), &created)
+	err = json.Unmarshal(createResp.Body.Bytes(), &created)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, created.ID)
 
@@ -93,7 +102,15 @@ func TestIntegrationGetRecipe(t *testing.T) {
 
 // TestIntegrationSaveRecipe expects the POST endpoint to return a saved recipe with a valid ID.
 func TestIntegrationSaveRecipe(t *testing.T) {
-	router := routes.SetupRouter()
+	// Initialize the database
+	config := db.NewConfig()
+	database, err := db.InitDB(config)
+	if err != nil {
+		t.Fatalf("Failed to initialize DB: %v", err)
+	}
+
+	// Initialize the router with the database
+	router := routes.SetupRouter(database)
 
 	reqBody := `{"title": "Integration Created Recipe", "ingredients": ["ing1"], "steps": ["step1"], "approved": true}`
 	req, _ := http.NewRequest("POST", "/v1/recipes", strings.NewReader(reqBody))
@@ -106,7 +123,7 @@ func TestIntegrationSaveRecipe(t *testing.T) {
 		ID    string `json:"id"`
 		Title string `json:"title"`
 	}
-	err := json.Unmarshal(w.Body.Bytes(), &recipe)
+	err = json.Unmarshal(w.Body.Bytes(), &recipe)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, recipe.ID)
 	assert.Equal(t, "Integration Created Recipe", recipe.Title)
@@ -180,3 +197,17 @@ func TestIntegrationUpdateRecipe(t *testing.T) {
 // 	// Optionally, check that the response body is empty
 // 	assert.Empty(t, w.Body.Bytes())
 // }
+
+func TestRecipeEndpoints(t *testing.T) {
+	// Initialize the database
+	config := db.NewConfig()
+	database, err := db.InitDB(config)
+	if err != nil {
+		t.Fatalf("Failed to initialize DB: %v", err)
+	}
+
+	// Initialize the router with the database
+	_ = routes.SetupRouter(database)
+
+	// ... rest of the test
+}

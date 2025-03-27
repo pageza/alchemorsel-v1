@@ -1,7 +1,9 @@
 package unit
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/services"
@@ -23,21 +25,32 @@ type MockRecipeRepository struct {
 	SaveRecipeFunc func(recipe *models.Recipe) error
 }
 
-func (m *MockRecipeRepository) GetRecipe(id string) (*models.Recipe, error) { return nil, nil }
-func (m *MockRecipeRepository) SaveRecipe(recipe *models.Recipe) error {
+func (m *MockRecipeRepository) GetRecipe(ctx context.Context, id string) (*models.Recipe, error) {
+	return nil, nil
+}
+func (m *MockRecipeRepository) SaveRecipe(ctx context.Context, recipe *models.Recipe) error {
 	return m.SaveRecipeFunc(recipe)
 }
-func (m *MockRecipeRepository) ListRecipes() ([]*models.Recipe, error)              { return nil, nil }
-func (m *MockRecipeRepository) UpdateRecipe(id string, recipe *models.Recipe) error { return nil }
-func (m *MockRecipeRepository) DeleteRecipe(id string) error                        { return nil }
+func (m *MockRecipeRepository) ListRecipes(ctx context.Context) ([]*models.Recipe, error) {
+	return nil, nil
+}
+func (m *MockRecipeRepository) UpdateRecipe(ctx context.Context, recipe *models.Recipe) error {
+	return nil
+}
+func (m *MockRecipeRepository) DeleteRecipe(ctx context.Context, id string) error { return nil }
 
 func TestSaveRecipeSuccess(t *testing.T) {
-	// Remove monkey patching (previously used to patch repositories.SaveRecipe)
-
 	// Create a mock repository that simulates a successful save.
 	mockRepo := &MockRecipeRepository{
 		SaveRecipeFunc: func(recipe *models.Recipe) error {
-			// Simulate successful save (e.g., do nothing and return nil)
+			// Set timestamps if they're not already set
+			now := time.Now()
+			if recipe.CreatedAt.IsZero() {
+				recipe.CreatedAt = now
+			}
+			if recipe.UpdatedAt.IsZero() {
+				recipe.UpdatedAt = now
+			}
 			return nil
 		},
 	}
@@ -48,9 +61,9 @@ func TestSaveRecipeSuccess(t *testing.T) {
 	}
 
 	// Instantiate the service with the mock repository.
-	service := &services.DefaultRecipeService{Repo: mockRepo}
+	service := services.NewRecipeService(mockRepo)
 
-	err := service.SaveRecipe(recipe)
+	err := service.SaveRecipe(context.Background(), recipe)
 	assert.Nil(t, err, "Expected no error on saving recipe")
 	assert.False(t, recipe.CreatedAt.IsZero(), "CreatedAt should be set")
 	assert.False(t, recipe.UpdatedAt.IsZero(), "UpdatedAt should be set")

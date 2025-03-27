@@ -13,8 +13,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"       // file source
 )
 
-// RunMigrations builds the DSN from environment variables and applies up migrations.
-func RunMigrations() error {
+// RunSQLiteMigrations builds the DSN from environment variables and applies up migrations.
+func RunSQLiteMigrations() error {
 	host := os.Getenv("POSTGRES_HOST")
 	port := os.Getenv("POSTGRES_PORT")
 	user := os.Getenv("POSTGRES_USER")

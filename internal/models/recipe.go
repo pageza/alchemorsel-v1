@@ -61,6 +61,7 @@ type Recipe struct {
 	Difficulty    string         `json:"difficulty"` // e.g., "Easy", "Medium", "Hard"
 	PrepTime      int            `json:"prep_time"`  // in minutes
 	CookTime      int            `json:"cook_time"`  // in minutes
+	Approved      bool           `json:"approved" gorm:"default:false"`
 }
 
 // BeforeCreate is a GORM hook that runs before a new record is inserted.
@@ -69,5 +70,46 @@ func (r *Recipe) BeforeCreate(tx *gorm.DB) (err error) {
 	if r.ID == "" {
 		r.ID = uuid.New().String()
 	}
+	if r.CreatedAt.IsZero() {
+		r.CreatedAt = time.Now()
+	}
+	if r.UpdatedAt.IsZero() {
+		r.UpdatedAt = time.Now()
+	}
+	return nil
+}
+
+// Helper methods for JSON conversion
+func (r *Recipe) GetIngredients() ([]string, error) {
+	var ingredients []string
+	if err := json.Unmarshal([]byte(r.Ingredients), &ingredients); err != nil {
+		return nil, err
+	}
+	return ingredients, nil
+}
+
+func (r *Recipe) SetIngredients(ingredients []string) error {
+	data, err := json.Marshal(ingredients)
+	if err != nil {
+		return err
+	}
+	r.Ingredients = datatypes.JSON(data)
+	return nil
+}
+
+func (r *Recipe) GetSteps() ([]string, error) {
+	var steps []string
+	if err := json.Unmarshal([]byte(r.Steps), &steps); err != nil {
+		return nil, err
+	}
+	return steps, nil
+}
+
+func (r *Recipe) SetSteps(steps []string) error {
+	data, err := json.Marshal(steps)
+	if err != nil {
+		return err
+	}
+	r.Steps = datatypes.JSON(data)
 	return nil
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/services"
+	"github.com/stretchr/testify/mock"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -96,7 +97,14 @@ func TestCreateUser(t *testing.T) {
 		// Updated password: at least 8 characters with one digit, one uppercase, one lowercase, and one special character.
 		Password: "Test1234!",
 	}
-	err := services.CreateUser(ctx, user)
+
+	mockRepo := new(MockUserRepository)
+	service := services.NewUserService(mockRepo)
+
+	mockRepo.On("GetUserByEmail", ctx, user.Email).Return(nil, nil)
+	mockRepo.On("CreateUser", ctx, mock.AnythingOfType("*models.User")).Return(nil)
+
+	err := service.CreateUser(ctx, user)
 	if err != nil {
 		t.Fatalf("User creation failed: %v", err)
 	}
@@ -104,4 +112,69 @@ func TestCreateUser(t *testing.T) {
 	if user.Password == "Test1234!" {
 		t.Errorf("Expected password to be hashed, but it remains in plain text")
 	}
+}
+
+// Replace db.DB usage with mock repositories
+type MockUserRepository struct {
+	mock.Mock
+}
+
+func (m *MockUserRepository) GetUser(ctx context.Context, id string) (*models.User, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func (m *MockUserRepository) CreateUser(ctx context.Context, user *models.User) error {
+	args := m.Called(ctx, user)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	args := m.Called(ctx, email)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func (m *MockUserRepository) UpdateUser(ctx context.Context, user *models.User) error {
+	args := m.Called(ctx, user)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) DeleteUser(ctx context.Context, id string) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) GetAllUsers(ctx context.Context) ([]*models.User, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.User), args.Error(1)
+}
+
+func (m *MockUserRepository) GetUserByResetPasswordToken(ctx context.Context, token string) (*models.User, error) {
+	args := m.Called(ctx, token)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
+func TestUserService(t *testing.T) {
+	mockRepo := new(MockUserRepository)
+	_ = services.NewUserService(mockRepo)
+
+	// TODO: Implement actual test cases using the mock repository
+	// For example:
+	// - Test user creation
+	// - Test user retrieval
+	// - Test user update
+	// - Test user deletion
+	// - Test password reset flow
 }

@@ -14,11 +14,42 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
-// SetupRouter sets up the Gin routes for the API.
-func SetupRouter() *gin.Engine {
-	router := gin.New()
+// SetupRouter initializes and returns the Gin router with all routes configured
+func SetupRouter(db *gorm.DB) *gin.Engine {
+	// For integration tests, ensure we use the Postgres test database.
+	if os.Getenv("INTEGRATION_TEST") == "true" && os.Getenv("DB_DRIVER") == "" {
+		os.Setenv("DB_DRIVER", "postgres")
+	}
+
+	if os.Getenv("DB_DRIVER") == "postgres" {
+		// For integration tests, set default Postgres env variables if not already set
+		if os.Getenv("INTEGRATION_TEST") == "true" {
+			if os.Getenv("POSTGRES_HOST") == "" {
+				os.Setenv("POSTGRES_HOST", "localhost")
+			}
+			if os.Getenv("POSTGRES_PORT") == "" {
+				os.Setenv("POSTGRES_PORT", "5432")
+			}
+			if os.Getenv("POSTGRES_USER") == "" {
+				os.Setenv("POSTGRES_USER", "postgres")
+			}
+			if os.Getenv("POSTGRES_PASSWORD") == "" {
+				os.Setenv("POSTGRES_PASSWORD", "postgres")
+			}
+			if os.Getenv("POSTGRES_DB") == "" {
+				os.Setenv("POSTGRES_DB", "testdb")
+			}
+		}
+
+		if err := repositories.AutoMigrate(); err != nil {
+			zap.S().Fatalf("failed to auto migrate: %v", err)
+		}
+	}
+
+	router := gin.Default()
 	// Disable trailing slash redirection to prevent 301 redirects on endpoints.
 	router.RedirectTrailingSlash = false
 	router.Use(gin.Recovery())
@@ -59,13 +90,17 @@ func SetupRouter() *gin.Engine {
 	// Grouping versioned API routes
 	v1 := router.Group("/v1")
 	{
-		// Initialize RecipeHandler with injected RecipeRepository dependency
-		recipeService := &services.DefaultRecipeService{Repo: &repositories.DefaultRecipeRepository{}}
-		recipeHandler := handlers.NewRecipeHandler(recipeService)
+		// Initialize repositories
+		userRepo := repositories.NewUserRepository(db)
+		recipeRepo := repositories.NewRecipeRepository(db)
 
-		// Initialize UserHandler with dependency-injected service
-		userService := &services.DefaultUserService{}
+		// Initialize services
+		userService := services.NewUserService(userRepo)
+		recipeService := services.NewRecipeService(recipeRepo)
+
+		// Initialize handlers
 		userHandler := handlers.NewUserHandler(userService)
+		recipeHandler := handlers.NewRecipeHandler(recipeService)
 
 		// Public user endpoints for registration, login and account management
 		v1.POST("/users", userHandler.CreateUser)
@@ -83,7 +118,7 @@ func SetupRouter() *gin.Engine {
 		v1.DELETE("/recipes/:id", recipeHandler.DeleteRecipe)
 
 		// Recipe resolution endpoint
-		v1.POST("/recipes/resolve", handlers.ResolveRecipe)
+		v1.POST("/recipes/resolve", recipeHandler.ResolveRecipe)
 
 		// Group for endpoints that require authentication.
 		secured := v1.Group("")
@@ -98,22 +133,6 @@ func SetupRouter() *gin.Engine {
 
 		// Health-check endpoint to support TestHealthCheck.
 		v1.GET("/health", handlers.HealthCheck)
-	}
-
-	// Always initialize the database connection.
-	dsn := os.Getenv("DB_SOURCE")
-	if dsn == "" {
-		zap.S().Fatal("DB_SOURCE environment variable not set")
-	}
-	if err := repositories.InitializeDB(dsn); err != nil {
-		zap.S().Fatalw("failed to initialize database", "error", err)
-	}
-	if err := repositories.AutoMigrate(); err != nil {
-		if strings.Contains(err.Error(), "uni_users_email") {
-			zap.S().Warnw("legacy migration drop constraint error ignored", "error", err)
-		} else {
-			zap.S().Fatalw("failed to migrate database", "error", err)
-		}
 	}
 
 	// For test or integration environments, clear users and insert a dummy user.

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 )
 
@@ -34,6 +35,11 @@ type RecipeResponse struct {
 // NewRecipeResponse converts a models.Recipe into a RecipeResponse DTO.
 // It unmarshals JSON fields and maps related models into slices of names.
 func NewRecipeResponse(r *models.Recipe) RecipeResponse {
+	// Fallback: if the recipe ID is empty, assign a new UUID.
+	if r.ID == "" {
+		r.ID = uuid.NewString()
+	}
+
 	var ingredients []string
 	_ = json.Unmarshal(r.Ingredients, &ingredients)
 

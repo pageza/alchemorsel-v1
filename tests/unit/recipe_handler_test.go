@@ -1,8 +1,8 @@
 package unit
 
 import (
+	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,47 +14,52 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/handlers"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 // Begin: New mock implementation for RecipeServiceInterface
 
 type MockRecipeService struct {
-	GetRecipeFunc     func(id string) (*models.Recipe, error)
-	SaveRecipeFunc    func(recipe *models.Recipe) error
-	ResolveRecipeFunc func(query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error)
+	mock.Mock
 }
 
-func (m *MockRecipeService) GetRecipe(id string) (*models.Recipe, error) {
-	if m.GetRecipeFunc != nil {
-		return m.GetRecipeFunc(id)
+func (m *MockRecipeService) GetRecipe(ctx context.Context, id string) (*models.Recipe, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
 	}
-	return nil, errors.New("not implemented")
+	return args.Get(0).(*models.Recipe), args.Error(1)
 }
 
-func (m *MockRecipeService) SaveRecipe(recipe *models.Recipe) error {
-	if m.SaveRecipeFunc != nil {
-		return m.SaveRecipeFunc(recipe)
+func (m *MockRecipeService) SaveRecipe(ctx context.Context, recipe *models.Recipe) error {
+	args := m.Called(ctx, recipe)
+	return args.Error(0)
+}
+
+func (m *MockRecipeService) ListRecipes(ctx context.Context) ([]*models.Recipe, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
 	}
-	return nil
+	return args.Get(0).([]*models.Recipe), args.Error(1)
 }
 
-func (m *MockRecipeService) ListRecipes() ([]*models.Recipe, error) {
-	return nil, errors.New("not implemented")
+func (m *MockRecipeService) UpdateRecipe(ctx context.Context, recipe *models.Recipe) error {
+	args := m.Called(ctx, recipe)
+	return args.Error(0)
 }
 
-func (m *MockRecipeService) UpdateRecipe(id string, recipe *models.Recipe) error {
-	return errors.New("not implemented")
-}
-
-func (m *MockRecipeService) DeleteRecipe(id string) error {
-	return errors.New("not implemented")
+func (m *MockRecipeService) DeleteRecipe(ctx context.Context, id string) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
 }
 
 func (m *MockRecipeService) ResolveRecipe(query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error) {
-	if m.ResolveRecipeFunc != nil {
-		return m.ResolveRecipeFunc(query, attributes)
+	args := m.Called(query, attributes)
+	if args.Get(0) == nil {
+		return nil, nil, args.Error(2)
 	}
-	return nil, nil, errors.New("not implemented")
+	return args.Get(0).(*models.Recipe), args.Get(1).([]*models.Recipe), args.Error(2)
 }
 
 // End: New mock implementation
@@ -86,19 +91,16 @@ func TestGetRecipeHandler(t *testing.T) {
 	testID := "123e4567-e89b-12d3-a456-426614174000"
 	c.Params = []gin.Param{{Key: "id", Value: testID}}
 
-	// Create a mock service with a GetRecipeFunc
-	mockService := &MockRecipeService{
-		GetRecipeFunc: func(id string) (*models.Recipe, error) {
-			return &models.Recipe{
-				ID:          id,
-				Title:       "My Recipe",
-				Ingredients: []byte("[]"),
-				Steps:       []byte("[]"),
-				CreatedAt:   time.Now(),
-				UpdatedAt:   time.Now(),
-			}, nil
-		},
-	}
+	// Create a mock service
+	mockService := new(MockRecipeService)
+	mockService.On("GetRecipe", c.Request.Context(), testID).Return(&models.Recipe{
+		ID:          testID,
+		Title:       "My Recipe",
+		Ingredients: []byte("[]"),
+		Steps:       []byte("[]"),
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}, nil)
 
 	handler := handlers.NewRecipeHandler(mockService)
 	handler.GetRecipe(c) // Call the handler
@@ -128,15 +130,9 @@ func TestSaveRecipeHandler(t *testing.T) {
 		strings.NewReader(`{"title": "New Recipe", "ingredients": ["ing1","ing2"], "steps": ["step1","step2"], "approved": true}`))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	// Create a mock service with a SaveRecipeFunc that sets the ID if not present
-	mockService := &MockRecipeService{
-		SaveRecipeFunc: func(recipe *models.Recipe) error {
-			if recipe.ID == "" {
-				recipe.ID = uuid.New().String()
-			}
-			return nil
-		},
-	}
+	// Create a mock service
+	mockService := new(MockRecipeService)
+	mockService.On("SaveRecipe", c.Request.Context(), mock.AnythingOfType("*models.Recipe")).Return(nil)
 
 	handler := handlers.NewRecipeHandler(mockService)
 	handler.SaveRecipe(c) // Call the handler
@@ -204,26 +200,23 @@ func TestResolveRecipeHandler(t *testing.T) {
 	c.Request = httptest.NewRequest("POST", "/v1/recipes/resolve", strings.NewReader(payload))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	// Create a mock service with a ResolveRecipeFunc
-	mockService := &MockRecipeService{
-		ResolveRecipeFunc: func(query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error) {
-			dummyRecipe := &models.Recipe{
-				ID:          "dummy-id",
-				Title:       "Dummy Recipe for " + query,
-				Ingredients: []byte("[]"),
-				Steps:       []byte("[]"),
-			}
-			similar := []*models.Recipe{
-				{
-					ID:          "similar-id",
-					Title:       "Similar Recipe for " + query,
-					Ingredients: []byte("[]"),
-					Steps:       []byte("[]"),
-				},
-			}
-			return dummyRecipe, similar, nil
+	// Create a mock service
+	mockService := new(MockRecipeService)
+	dummyRecipe := &models.Recipe{
+		ID:          "dummy-id",
+		Title:       "Dummy Recipe for chocolate cake",
+		Ingredients: []byte("[]"),
+		Steps:       []byte("[]"),
+	}
+	similar := []*models.Recipe{
+		{
+			ID:          "similar-id",
+			Title:       "Similar Recipe for chocolate cake",
+			Ingredients: []byte("[]"),
+			Steps:       []byte("[]"),
 		},
 	}
+	mockService.On("ResolveRecipe", "chocolate cake", map[string]interface{}{"approved": true}).Return(dummyRecipe, similar, nil)
 
 	// Initialize the handler with the mock service
 	handler := handlers.NewRecipeHandler(mockService)
