@@ -9,6 +9,11 @@
       "key": "token",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "recipe_id",
+      "value": "",
+      "type": "string"
     }
   ],
   "event": [
@@ -110,6 +115,8 @@
               "    pm.expect(response.ingredients).to.be.an('array');",
               "    pm.expect(response.steps).to.be.an('array');",
               "    pm.expect(response.approved).to.be.true;",
+              "    // Save the recipe ID for subsequent requests",
+              "    pm.environment.set('recipe_id', response.id);",
               "});"
             ],
             "type": "text/javascript"

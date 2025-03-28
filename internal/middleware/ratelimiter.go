@@ -56,7 +56,7 @@ func getLimiter(key string, config RateLimitConfig) *rate.Limiter {
 	return limiter
 }
 
-// Tollbooth-based rate limiter for general endpoints
+// RateLimiter limits the rate of requests per IP and path
 func RateLimiter() gin.HandlerFunc {
 	config := DefaultConfig()
 	if gin.Mode() == gin.TestMode || os.Getenv("INTEGRATION_TEST") == "true" {
@@ -77,9 +77,13 @@ func RateLimiter() gin.HandlerFunc {
 		limiter := getLimiter(key, config)
 
 		if !limiter.Allow() {
+			retryAfter := time.Second
+			if config.RequestsPerSecond > 0 {
+				retryAfter = time.Second / time.Duration(config.RequestsPerSecond)
+			}
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error":       "rate limit exceeded",
-				"retry_after": time.Until(time.Now().Add(time.Second / time.Duration(config.RequestsPerSecond))).String(),
+				"retry_after": time.Until(time.Now().Add(retryAfter)).String(),
 			})
 			return
 		}
@@ -87,9 +91,13 @@ func RateLimiter() gin.HandlerFunc {
 		// Check tollbooth limiter as well
 		err := tollbooth.LimitByRequest(lmt, c.Writer, c.Request)
 		if err != nil {
+			retryAfter := time.Second
+			if config.RequestsPerSecond > 0 {
+				retryAfter = time.Second / time.Duration(config.RequestsPerSecond)
+			}
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error":       "rate limit exceeded",
-				"retry_after": time.Until(time.Now().Add(time.Second / time.Duration(config.RequestsPerSecond))).String(),
+				"retry_after": time.Until(time.Now().Add(retryAfter)).String(),
 			})
 			return
 		}
@@ -115,9 +123,13 @@ func LoginRateLimiter() gin.HandlerFunc {
 		limiter := getLimiter("login:"+clientIP, config)
 
 		if !limiter.Allow() {
+			retryAfter := time.Second
+			if config.RequestsPerSecond > 0 {
+				retryAfter = time.Second / time.Duration(config.RequestsPerSecond)
+			}
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error":       "Too many login attempts. Please try again later.",
-				"retry_after": time.Until(time.Now().Add(time.Second / time.Duration(config.RequestsPerSecond))).String(),
+				"retry_after": time.Until(time.Now().Add(retryAfter)).String(),
 			})
 			return
 		}
@@ -143,9 +155,13 @@ func ForgotPasswordRateLimiter() gin.HandlerFunc {
 		limiter := getLimiter("forgot_password:"+clientIP, config)
 
 		if !limiter.Allow() {
+			retryAfter := time.Second
+			if config.RequestsPerSecond > 0 {
+				retryAfter = time.Second / time.Duration(config.RequestsPerSecond)
+			}
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error":       "Too many password reset attempts. Please try again later.",
-				"retry_after": time.Until(time.Now().Add(time.Second / time.Duration(config.RequestsPerSecond))).String(),
+				"retry_after": time.Until(time.Now().Add(retryAfter)).String(),
 			})
 			return
 		}

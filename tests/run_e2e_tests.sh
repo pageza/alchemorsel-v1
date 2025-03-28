@@ -2,15 +2,18 @@
 
 # Wait for the app to be ready
 echo "Waiting for app to be ready..."
-while ! curl -s http://app:8080/v1/health > /dev/null; do
+while ! curl -s http://localhost:8080/v1/health > /dev/null; do
+    echo "Waiting for app to be ready..."
     sleep 1
 done
 echo "App is ready!"
 
 # Build the Newman Docker image
-docker build -t alchemorsel-e2e-tests -f Dockerfile.newman .
+echo "Building Newman Docker image..."
+docker build -t alchemorsel-e2e-tests -f tests/Dockerfile.newman .
 
 # Run the Newman container
+echo "Running Newman tests..."
 docker run --rm \
   --network alchemorsel-v1_appnet \
   -e "base_url=http://app:8080" \
