@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -77,24 +79,51 @@ func (h *RecipeHandler) GetRecipe(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/recipes [post]
 func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
-	var recipe models.Recipe
-	if err := c.ShouldBindJSON(&recipe); err != nil {
+	var recipeReq dtos.RecipeRequest
+	if err := c.ShouldBindJSON(&recipeReq); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	// Sanitize input: trim spaces from title
-	recipe.Title = strings.TrimSpace(recipe.Title)
-	if recipe.Title == "" {
-		recipe.Title = "Integration Created Recipe"
+	recipeReq.Title = strings.TrimSpace(recipeReq.Title)
+	if recipeReq.Title == "" {
+		recipeReq.Title = "Integration Created Recipe"
 	}
 
-	// Set default empty arrays for ingredients and steps if they're empty
-	if len(recipe.Ingredients) == 0 {
-		recipe.Ingredients = []byte("[]")
+	// Convert ingredients to string array for JSON
+	var ingredientStrings []string
+	for _, ingredient := range recipeReq.Ingredients {
+		ingredientStrings = append(ingredientStrings, fmt.Sprintf("%s - %s%s", ingredient.Name, ingredient.Amount, ingredient.Unit))
 	}
-	if len(recipe.Steps) == 0 {
-		recipe.Steps = []byte("[]")
+
+	// Convert steps to string array for JSON
+	var stepStrings []string
+	for _, step := range recipeReq.Steps {
+		stepStrings = append(stepStrings, step.Description)
+	}
+
+	// Convert arrays to JSON
+	ingredientsJSON, err := json.Marshal(ingredientStrings)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ingredients format"})
+		return
+	}
+
+	stepsJSON, err := json.Marshal(stepStrings)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid steps format"})
+		return
+	}
+
+	// Create the recipe model
+	recipe := models.Recipe{
+		Title:             recipeReq.Title,
+		Ingredients:       ingredientsJSON,
+		Steps:             stepsJSON,
+		NutritionalInfo:   recipeReq.NutritionalInfo,
+		AllergyDisclaimer: recipeReq.AllergyDisclaimer,
+		Approved:          recipeReq.Approved,
 	}
 
 	// Check if the candidate recipe has been approved.

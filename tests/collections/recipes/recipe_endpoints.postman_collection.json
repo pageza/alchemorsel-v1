@@ -91,7 +91,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n    \"title\": \"Test Recipe\",\n    \"ingredients\": [\"Ingredient 1 - 100g\"],\n    \"steps\": [\"Step 1: Do something\", \"Step 2: Do something else\"],\n    \"nutritional_info\": \"Test nutritional info\",\n    \"allergy_disclaimer\": \"Test allergy disclaimer\",\n    \"appliances\": [\"oven\", \"stove\"],\n    \"cuisines\": [\"test\"],\n    \"diets\": [\"test\"],\n    \"approved\": true\n}"
+          "raw": "{\n    \"title\": \"Test Recipe\",\n    \"ingredients\": [\n        {\n            \"name\": \"Ingredient 1\",\n            \"amount\": \"100\",\n            \"unit\": \"g\"\n        }\n    ],\n    \"steps\": [\n        {\n            \"order\": 1,\n            \"description\": \"Step 1: Do something\"\n        },\n        {\n            \"order\": 2,\n            \"description\": \"Step 2: Do something else\"\n        }\n    ],\n    \"nutritional_info\": \"Test nutritional info\",\n    \"allergy_disclaimer\": \"Test allergy disclaimer\",\n    \"appliances\": [\"oven\", \"stove\"],\n    \"cuisines\": [\"test\"],\n    \"diets\": [\"test\"],\n    \"approved\": true\n}"
         },
         "url": {
           "raw": "{{base_url}}/v1/recipes",
@@ -179,7 +179,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n    \"title\": \"Updated Test Recipe\",\n    \"description\": \"An updated test recipe\",\n    \"ingredients\": [\n        {\n            \"name\": \"Updated Ingredient\",\n            \"amount\": \"200g\",\n            \"unit\": \"grams\"\n        }\n    ],\n    \"instructions\": [\n        \"Updated Step 1\",\n        \"Updated Step 2\"\n    ],\n    \"cooking_time\": 45,\n    \"difficulty\": \"hard\",\n    \"servings\": 6,\n    \"tags\": [\"test\", \"api\", \"updated\"]\n}"
+          "raw": "{\n    \"title\": \"Updated Test Recipe\",\n    \"description\": \"An updated test recipe\",\n    \"ingredients\": [\n        {\n            \"name\": \"Updated Ingredient\",\n            \"amount\": \"200\",\n            \"unit\": \"g\"\n        }\n    ],\n    \"steps\": [\n        {\n            \"order\": 1,\n            \"description\": \"Updated Step 1\"\n        },\n        {\n            \"order\": 2,\n            \"description\": \"Updated Step 2\"\n        }\n    ],\n    \"cooking_time\": 45,\n    \"difficulty\": \"hard\",\n    \"servings\": 6,\n    \"tags\": [\"test\", \"api\", \"updated\"],\n    \"approved\": true\n}"
         },
         "url": {
           "raw": "{{base_url}}/v1/recipes/{{recipe_id}}",

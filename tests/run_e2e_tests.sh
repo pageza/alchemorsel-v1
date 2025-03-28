@@ -10,7 +10,7 @@ echo "App is ready!"
 
 # Build the Newman Docker image
 echo "Building Newman Docker image..."
-docker build -t alchemorsel-e2e-tests -f tests/Dockerfile.newman .
+cd tests && docker build -t alchemorsel-e2e-tests -f Dockerfile.newman . && cd ..
 
 # Run the Newman container
 echo "Running Newman tests..."
