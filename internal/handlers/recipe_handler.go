@@ -124,6 +124,30 @@ func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 		NutritionalInfo:   recipeReq.NutritionalInfo,
 		AllergyDisclaimer: recipeReq.AllergyDisclaimer,
 		Approved:          recipeReq.Approved,
+		Cuisines:          make([]models.Cuisine, len(recipeReq.Cuisines)),
+		Diets:             make([]models.Diet, len(recipeReq.Diets)),
+		Appliances:        make([]models.Appliance, len(recipeReq.Appliances)),
+		Tags:              make([]models.Tag, len(recipeReq.Tags)),
+	}
+
+	// Convert cuisine names to models
+	for i, name := range recipeReq.Cuisines {
+		recipe.Cuisines[i] = models.Cuisine{Name: name}
+	}
+
+	// Convert diet names to models
+	for i, name := range recipeReq.Diets {
+		recipe.Diets[i] = models.Diet{Name: name}
+	}
+
+	// Convert appliance names to models
+	for i, name := range recipeReq.Appliances {
+		recipe.Appliances[i] = models.Appliance{Name: name}
+	}
+
+	// Convert tag names to models
+	for i, name := range recipeReq.Tags {
+		recipe.Tags[i] = models.Tag{Name: name}
 	}
 
 	// Generate a text representation for embedding generation.
@@ -164,49 +188,100 @@ func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/recipes/{id} [put]
 func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
-	var recipe models.Recipe
-	if err := c.ShouldBindJSON(&recipe); err != nil {
+	var recipeReq dtos.RecipeRequest
+	if err := c.ShouldBindJSON(&recipeReq); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Sanitize input
-	recipe.Title = strings.TrimSpace(recipe.Title)
+	// Sanitize input: trim spaces from title
+	recipeReq.Title = strings.TrimSpace(recipeReq.Title)
+	if recipeReq.Title == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Recipe title is required"})
+		return
+	}
 
-	// Get ingredients and steps as strings
-	ingredients, err := recipe.GetIngredients()
+	// Convert ingredients to string array for JSON
+	var ingredientStrings []string
+	for _, ingredient := range recipeReq.Ingredients {
+		ingredientStrings = append(ingredientStrings, fmt.Sprintf("%s - %s%s", ingredient.Name, ingredient.Amount, ingredient.Unit))
+	}
+
+	// Convert steps to string array for JSON
+	var stepStrings []string
+	for _, step := range recipeReq.Steps {
+		stepStrings = append(stepStrings, step.Description)
+	}
+
+	// Convert arrays to JSON
+	ingredientsJSON, err := json.Marshal(ingredientStrings)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ingredients format"})
 		return
 	}
-	steps, err := recipe.GetSteps()
+
+	stepsJSON, err := json.Marshal(stepStrings)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid steps format"})
 		return
 	}
 
-	// Sanitize ingredients and steps
-	for i, ingredient := range ingredients {
-		ingredients[i] = strings.TrimSpace(ingredient)
-	}
-	for i, step := range steps {
-		steps[i] = strings.TrimSpace(step)
-	}
-
-	// Set sanitized ingredients and steps back
-	if err := recipe.SetIngredients(ingredients); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set ingredients"})
-		return
-	}
-	if err := recipe.SetSteps(steps); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set steps"})
-		return
+	// Create the recipe model
+	recipe := models.Recipe{
+		ID:                c.Param("id"),
+		Title:             recipeReq.Title,
+		Ingredients:       ingredientsJSON,
+		Steps:             stepsJSON,
+		NutritionalInfo:   recipeReq.NutritionalInfo,
+		AllergyDisclaimer: recipeReq.AllergyDisclaimer,
+		Approved:          recipeReq.Approved,
+		Cuisines:          make([]models.Cuisine, len(recipeReq.Cuisines)),
+		Diets:             make([]models.Diet, len(recipeReq.Diets)),
+		Appliances:        make([]models.Appliance, len(recipeReq.Appliances)),
+		Tags:              make([]models.Tag, len(recipeReq.Tags)),
 	}
 
+	// Convert cuisine names to models
+	for i, name := range recipeReq.Cuisines {
+		recipe.Cuisines[i] = models.Cuisine{Name: name}
+	}
+
+	// Convert diet names to models
+	for i, name := range recipeReq.Diets {
+		recipe.Diets[i] = models.Diet{Name: name}
+	}
+
+	// Convert appliance names to models
+	for i, name := range recipeReq.Appliances {
+		recipe.Appliances[i] = models.Appliance{Name: name}
+	}
+
+	// Convert tag names to models
+	for i, name := range recipeReq.Tags {
+		recipe.Tags[i] = models.Tag{Name: name}
+	}
+
+	// Generate a text representation for embedding generation.
+	recipeText := recipe.Title + " " + string(recipe.Ingredients) + " " + string(recipe.Steps)
+
+	// Skip embedding generation in test mode
+	if os.Getenv("TEST_MODE") != "true" {
+		embedding, err := integrations.GenerateEmbedding(recipeText)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate embedding: " + err.Error()})
+			return
+		}
+		recipe.Embedding = embedding
+	}
+
+	// Update the recipe via the service.
 	if err := h.Service.UpdateRecipe(c.Request.Context(), &recipe); err != nil {
+		zap.S().Errorw("UpdateRecipe service error", "error", err, "recipeID", recipe.ID, "title", recipe.Title)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Create the response DTO
 	resp := dtos.NewRecipeResponse(&recipe)
 	c.JSON(http.StatusOK, resp)
 }

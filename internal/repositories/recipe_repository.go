@@ -183,28 +183,135 @@ func NewRecipeRepository(db *gorm.DB) RecipeRepository {
 
 func (r *DefaultRecipeRepository) GetRecipe(ctx context.Context, id string) (*models.Recipe, error) {
 	var recipe models.Recipe
-	if err := r.db.WithContext(ctx).First(&recipe, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).
+		Preload("Cuisines").
+		Preload("Diets").
+		Preload("Appliances").
+		Preload("Tags").
+		First(&recipe, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	return &recipe, nil
 }
 
 func (r *DefaultRecipeRepository) SaveRecipe(ctx context.Context, recipe *models.Recipe) error {
-	return r.db.WithContext(ctx).Create(recipe).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Set timestamps
+		if recipe.CreatedAt.IsZero() {
+			recipe.CreatedAt = time.Now()
+		}
+		recipe.UpdatedAt = time.Now()
+
+		// Generate UUID if not set
+		if recipe.ID == "" {
+			recipe.ID = uuid.New().String()
+		}
+
+		// Create the recipe first
+		if err := tx.Create(recipe).Error; err != nil {
+			return err
+		}
+
+		// Handle many-to-many relationships
+		if len(recipe.Cuisines) > 0 {
+			if err := tx.Model(recipe).Association("Cuisines").Replace(recipe.Cuisines); err != nil {
+				return err
+			}
+		}
+
+		if len(recipe.Diets) > 0 {
+			if err := tx.Model(recipe).Association("Diets").Replace(recipe.Diets); err != nil {
+				return err
+			}
+		}
+
+		if len(recipe.Appliances) > 0 {
+			if err := tx.Model(recipe).Association("Appliances").Replace(recipe.Appliances); err != nil {
+				return err
+			}
+		}
+
+		if len(recipe.Tags) > 0 {
+			if err := tx.Model(recipe).Association("Tags").Replace(recipe.Tags); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *DefaultRecipeRepository) ListRecipes(ctx context.Context) ([]*models.Recipe, error) {
 	var recipes []*models.Recipe
-	if err := r.db.WithContext(ctx).Find(&recipes).Error; err != nil {
+	if err := r.db.WithContext(ctx).
+		Preload("Cuisines").
+		Preload("Diets").
+		Preload("Appliances").
+		Preload("Tags").
+		Find(&recipes).Error; err != nil {
 		return nil, err
 	}
 	return recipes, nil
 }
 
 func (r *DefaultRecipeRepository) UpdateRecipe(ctx context.Context, recipe *models.Recipe) error {
-	return r.db.WithContext(ctx).Save(recipe).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Update timestamp
+		recipe.UpdatedAt = time.Now()
+
+		// Update the recipe first
+		if err := tx.Save(recipe).Error; err != nil {
+			return err
+		}
+
+		// Handle many-to-many relationships
+		if len(recipe.Cuisines) > 0 {
+			if err := tx.Model(recipe).Association("Cuisines").Replace(recipe.Cuisines); err != nil {
+				return err
+			}
+		}
+
+		if len(recipe.Diets) > 0 {
+			if err := tx.Model(recipe).Association("Diets").Replace(recipe.Diets); err != nil {
+				return err
+			}
+		}
+
+		if len(recipe.Appliances) > 0 {
+			if err := tx.Model(recipe).Association("Appliances").Replace(recipe.Appliances); err != nil {
+				return err
+			}
+		}
+
+		if len(recipe.Tags) > 0 {
+			if err := tx.Model(recipe).Association("Tags").Replace(recipe.Tags); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *DefaultRecipeRepository) DeleteRecipe(ctx context.Context, id string) error {
-	return r.db.WithContext(ctx).Delete(&models.Recipe{}, "id = ?", id).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		recipe := &models.Recipe{ID: id}
+
+		// Clear all associations first
+		if err := tx.Model(recipe).Association("Cuisines").Clear(); err != nil {
+			return err
+		}
+		if err := tx.Model(recipe).Association("Diets").Clear(); err != nil {
+			return err
+		}
+		if err := tx.Model(recipe).Association("Appliances").Clear(); err != nil {
+			return err
+		}
+		if err := tx.Model(recipe).Association("Tags").Clear(); err != nil {
+			return err
+		}
+
+		// Delete the recipe
+		return tx.Delete(recipe).Error
+	})
 }

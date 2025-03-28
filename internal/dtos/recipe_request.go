@@ -25,6 +25,8 @@ type RecipeRequest struct {
 	// New fields for filtering by cuisines and diets
 	Cuisines []string `json:"cuisines,omitempty"`
 	Diets    []string `json:"diets,omitempty"`
+	// Tags for recipe categorization and search
+	Tags []string `json:"tags,omitempty"`
 	// Approved indicates whether the candidate recipe has been approved by the user.
 	Approved bool `json:"approved,omitempty"`
 }
@@ -43,6 +45,8 @@ type RecipeResolutionRequest struct {
 	// New fields for filtering by cuisines and diets
 	Cuisines []string `json:"cuisines,omitempty"`
 	Diets    []string `json:"diets,omitempty"`
+	// Tags for recipe categorization and search
+	Tags []string `json:"tags,omitempty"`
 	// Additional instructions on how to modify or generate a new recipe
 	ModificationInstructions string `json:"modification_instructions,omitempty"`
 }
