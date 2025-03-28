@@ -4,6 +4,71 @@
     "description": "Collection for testing recipe-related endpoints",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "variable": [
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Create a test user",
+          "pm.sendRequest({",
+          "    url: pm.environment.get('base_url') + '/v1/users',",
+          "    method: 'POST',",
+          "    header: {",
+          "        'Content-Type': 'application/json'",
+          "    },",
+          "    body: {",
+          "        mode: 'raw',",
+          "        raw: JSON.stringify({",
+          "            name: 'Test User',",
+          "            email: 'test@example.com',",
+          "            password: 'testpassword123'",
+          "        })",
+          "    }",
+          "}, function (err, res) {",
+          "    if (err) {",
+          "        console.error('Error creating test user:', err);",
+          "        return;",
+          "    }",
+          "    if (res.code === 201 || res.code === 409) {",
+          "        // User created or already exists, proceed with login",
+          "        pm.sendRequest({",
+          "            url: pm.environment.get('base_url') + '/v1/users/login',",
+          "            method: 'POST',",
+          "            header: {",
+          "                'Content-Type': 'application/json'",
+          "            },",
+          "            body: {",
+          "                mode: 'raw',",
+          "                raw: JSON.stringify({",
+          "                    email: 'test@example.com',",
+          "                    password: 'testpassword123'",
+          "                })",
+          "            }",
+          "        }, function (err, res) {",
+          "            if (err) {",
+          "                console.error('Error logging in:', err);",
+          "                return;",
+          "            }",
+          "            if (res.code === 200) {",
+          "                const response = res.json();",
+          "                pm.environment.set('token', response.token);",
+          "                console.log('Token set successfully');",
+          "            }",
+          "        });",
+          "    }",
+          "});"
+        ]
+      }
+    }
+  ],
   "item": [
     {
       "name": "Create Recipe",
@@ -21,7 +86,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n    \"title\": \"Test Recipe\",\n    \"description\": \"A test recipe for API testing\",\n    \"ingredients\": [\n        {\n            \"name\": \"Ingredient 1\",\n            \"amount\": \"100g\",\n            \"unit\": \"grams\"\n        }\n    ],\n    \"instructions\": [\n        \"Step 1: Do something\",\n        \"Step 2: Do something else\"\n    ],\n    \"cooking_time\": 30,\n    \"difficulty\": \"medium\",\n    \"servings\": 4,\n    \"tags\": [\"test\", \"api\"]\n}"
+          "raw": "{\n    \"title\": \"Test Recipe\",\n    \"ingredients\": [\"Ingredient 1 - 100g\"],\n    \"steps\": [\"Step 1: Do something\", \"Step 2: Do something else\"],\n    \"nutritional_info\": \"Test nutritional info\",\n    \"allergy_disclaimer\": \"Test allergy disclaimer\",\n    \"appliances\": [\"oven\", \"stove\"],\n    \"cuisines\": [\"test\"],\n    \"diets\": [\"test\"],\n    \"approved\": true\n}"
         },
         "url": {
           "raw": "{{base_url}}/v1/recipes",
@@ -43,8 +108,8 @@
               "    pm.expect(response).to.have.property('id');",
               "    pm.expect(response.title).to.equal('Test Recipe');",
               "    pm.expect(response.ingredients).to.be.an('array');",
-              "    pm.expect(response.instructions).to.be.an('array');",
-              "    pm.expect(response.tags).to.be.an('array');",
+              "    pm.expect(response.steps).to.be.an('array');",
+              "    pm.expect(response.approved).to.be.true;",
               "});"
             ],
             "type": "text/javascript"

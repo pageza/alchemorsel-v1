@@ -55,8 +55,11 @@ func TestIntegrationGetRecipe(t *testing.T) {
 		t.Fatalf("Failed to initialize DB: %v", err)
 	}
 
-	// Initialize the router with the database
-	router := routes.SetupRouter(database)
+	// Create test logger
+	logger := createTestLogger()
+
+	// Initialize the router with the database and logger
+	router := routes.SetupRouter(database, logger)
 
 	// Create a recipe
 	postBody := `{"title": "Integration Test Recipe Get", "ingredients": ["ing"], "steps": ["s"], "approved": true}`
@@ -109,8 +112,11 @@ func TestIntegrationSaveRecipe(t *testing.T) {
 		t.Fatalf("Failed to initialize DB: %v", err)
 	}
 
-	// Initialize the router with the database
-	router := routes.SetupRouter(database)
+	// Create test logger
+	logger := createTestLogger()
+
+	// Initialize the router with the database and logger
+	router := routes.SetupRouter(database, logger)
 
 	reqBody := `{"title": "Integration Created Recipe", "ingredients": ["ing1"], "steps": ["step1"], "approved": true}`
 	req, _ := http.NewRequest("POST", "/v1/recipes", strings.NewReader(reqBody))
@@ -206,8 +212,11 @@ func TestRecipeEndpoints(t *testing.T) {
 		t.Fatalf("Failed to initialize DB: %v", err)
 	}
 
-	// Initialize the router with the database
-	_ = routes.SetupRouter(database)
+	// Create test logger
+	logger := createTestLogger()
+
+	// Initialize the router with the database and logger
+	_ = routes.SetupRouter(database, logger)
 
 	// ... rest of the test
 }

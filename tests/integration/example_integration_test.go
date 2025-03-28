@@ -28,8 +28,11 @@ func TestHealthCheck(t *testing.T) {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	// Initialize the router with the database
-	router := routes.SetupRouter(database)
+	// Create test logger
+	logger := createTestLogger()
+
+	// Initialize the router with the database and logger
+	router := routes.SetupRouter(database, logger)
 
 	// Call the health check endpoint
 	req, _ := http.NewRequest("GET", "/v1/health", nil)
@@ -59,8 +62,11 @@ func TestExample(t *testing.T) {
 		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	// Initialize the router with the database
-	_ = routes.SetupRouter(database)
+	// Create test logger
+	logger := createTestLogger()
+
+	// Initialize the router with the database and logger
+	_ = routes.SetupRouter(database, logger)
 
 	// Use the router in your tests
 	// ...
