@@ -126,19 +126,8 @@ func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 		Approved:          recipeReq.Approved,
 	}
 
-	// Check if the candidate recipe has been approved.
-	if !recipe.Approved {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Recipe not approved by user"})
-		return
-	}
-
-	// Log that an approved recipe is being processed.
-	zap.S().Infow("User-approved recipe received. Proceeding with save", "title", recipe.Title)
-
 	// Generate a text representation for embedding generation.
-	ingredients, _ := recipe.GetIngredients()
-	steps, _ := recipe.GetSteps()
-	recipeText := recipe.Title + " " + strings.Join(ingredients, " ") + " " + strings.Join(steps, " ")
+	recipeText := recipe.Title + " " + string(recipe.Ingredients) + " " + string(recipe.Steps)
 
 	// Skip embedding generation in test mode
 	if os.Getenv("TEST_MODE") != "true" {
