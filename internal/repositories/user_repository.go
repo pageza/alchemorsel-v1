@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -132,6 +133,7 @@ type UserRepository interface {
 	DeleteUser(ctx context.Context, id string) error
 	GetUserByResetPasswordToken(ctx context.Context, token string) (*models.User, error)
 	GetAllUsers(ctx context.Context) ([]*models.User, error)
+	FindByEmail(email string) (*models.User, error)
 }
 
 type DefaultUserRepository struct {
@@ -145,20 +147,32 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 func (r *DefaultUserRepository) GetUser(ctx context.Context, id string) (*models.User, error) {
 	var user models.User
 	if err := r.db.WithContext(ctx).First(&user, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return &user, nil
 }
 
 func (r *DefaultUserRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	normalizedEmail := normalizeEmail(email)
 	var user models.User
-	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+	err := r.db.WithContext(ctx).Where("email = ?", normalizedEmail).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return &user, nil
 }
 
 func (r *DefaultUserRepository) CreateUser(ctx context.Context, user *models.User) error {
+	// Always generate a new ID to prevent external IDs from causing inconsistencies.
+	user.ID = uuid.NewString()
+	user.Email = normalizeEmail(user.Email)
+
 	return r.db.WithContext(ctx).Create(user).Error
 }
 
@@ -187,4 +201,23 @@ func (r *DefaultUserRepository) GetAllUsers(ctx context.Context) ([]*models.User
 		return nil, err
 	}
 	return users, nil
+}
+
+func (r *DefaultUserRepository) FindByEmail(email string) (*models.User, error) {
+	// Validate email format
+	if !isValidEmail(email) {
+		return nil, fmt.Errorf("invalid email format")
+	}
+
+	var user models.User
+	if err := r.db.Where("email = ?", email).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// isValidEmail validates email format
+func isValidEmail(email string) bool {
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+	return emailRegex.MatchString(email)
 }

@@ -8,7 +8,7 @@ import (
 
 // User represents a user of the application.
 type User struct {
-	ID                       string         `json:"id"`
+	ID                       string         `json:"id" gorm:"type:uuid;primaryKey"`
 	Name                     string         `json:"name" binding:"required"`
 	Email                    string         `json:"email" binding:"required,email" gorm:"uniqueIndex:users_email_key"`
 	Password                 string         `json:"password" binding:"required"`

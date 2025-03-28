@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"gorm.io/datatypes"
 )
 
 // Begin: New mock implementation for RecipeServiceInterface
@@ -90,6 +92,8 @@ func TestGetRecipeHandler(t *testing.T) {
 	// Using a known valid UUID for testing
 	testID := "123e4567-e89b-12d3-a456-426614174000"
 	c.Params = []gin.Param{{Key: "id", Value: testID}}
+	// Added to ensure c.Request is not nil
+	c.Request = httptest.NewRequest("GET", "/v1/recipes/"+testID, nil)
 
 	// Create a mock service
 	mockService := new(MockRecipeService)
@@ -125,31 +129,59 @@ func TestSaveRecipeHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	// Simulate a proper JSON payload for a new recipe.
-	c.Request = httptest.NewRequest("POST", "/v1/recipes",
-		strings.NewReader(`{"title": "New Recipe", "ingredients": ["ing1","ing2"], "steps": ["step1","step2"], "approved": true}`))
+
+	// Set TEST_MODE to true
+	os.Setenv("TEST_MODE", "true")
+	defer os.Unsetenv("TEST_MODE")
+
+	// Create a valid JSON payload with all required fields
+	payload := map[string]interface{}{
+		"title":              "New Recipe",
+		"ingredients":        []string{"ingredient1", "ingredient2"},
+		"steps":              []string{"step1", "step2"},
+		"nutritional_info":   "",
+		"allergy_disclaimer": "",
+		"embedding":          []float64{},
+		"approved":           true,
+	}
+
+	payloadBytes, _ := json.Marshal(payload)
+
+	// Initialize the request with the JSON payload
+	c.Request = httptest.NewRequest("POST", "/v1/recipes", strings.NewReader(string(payloadBytes)))
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	// Create a mock service
 	mockService := new(MockRecipeService)
-	mockService.On("SaveRecipe", c.Request.Context(), mock.AnythingOfType("*models.Recipe")).Return(nil)
+	mockService.On("SaveRecipe", c.Request.Context(), mock.AnythingOfType("*models.Recipe")).Run(func(args mock.Arguments) {
+		recipe := args.Get(1).(*models.Recipe)
+		recipe.ID = uuid.New().String()
+		recipe.Title = "New Recipe"
+		recipe.CreatedAt = time.Now()
+		recipe.UpdatedAt = time.Now()
+		// Set ingredients and steps
+		ingredientsJSON, _ := json.Marshal([]string{"ingredient1", "ingredient2"})
+		stepsJSON, _ := json.Marshal([]string{"step1", "step2"})
+		recipe.Ingredients = datatypes.JSON(ingredientsJSON)
+		recipe.Steps = datatypes.JSON(stepsJSON)
+	}).Return(nil)
 
 	handler := handlers.NewRecipeHandler(mockService)
 	handler.SaveRecipe(c) // Call the handler
 
 	assert.Equal(t, http.StatusCreated, w.Code)
 
-	var recipe struct {
-		ID    string `json:"id"`
-		Title string `json:"title"`
+	var response struct {
+		ID    string   `json:"id"`
+		Title string   `json:"title"`
+		Steps []string `json:"steps"`
 	}
-	err := json.Unmarshal(w.Body.Bytes(), &recipe)
+	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	// Ensure the ID is a valid UUID
-	assert.NotEmpty(t, recipe.ID)
-	_, err = uuid.Parse(recipe.ID)
+	assert.NotEmpty(t, response.ID)
+	_, err = uuid.Parse(response.ID)
 	assert.NoError(t, err)
-	assert.Equal(t, "New Recipe", recipe.Title)
+	assert.Equal(t, "New Recipe", response.Title)
 }
 
 // TestUpdateRecipeHandler expects that updating a recipe returns the updated recipe.

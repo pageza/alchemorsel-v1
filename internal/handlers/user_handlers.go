@@ -108,17 +108,24 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 
 // CreateUser creates a new user with dependency injection.
 func (h *UserHandler) CreateUser(c *gin.Context) {
-	var user models.User
-	if err := c.ShouldBindJSON(&user); err != nil {
+	var input struct {
+		Name     string `json:"name" binding:"required"`
+		Email    string `json:"email" binding:"required,email"`
+		Password string `json:"password" binding:"required,min=8"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if strings.TrimSpace(user.Name) == "" || strings.TrimSpace(user.Email) == "" || strings.TrimSpace(user.Password) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "name, email, and password are required"})
-		return
+
+	user := models.User{
+		Name:     input.Name,
+		Email:    input.Email,
+		Password: input.Password,
 	}
+
 	if err := h.Service.CreateUser(c.Request.Context(), &user); err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		if strings.Contains(err.Error(), "already exists") {
 			c.JSON(http.StatusConflict, gin.H{"error": "user already exists"})
 			return
 		}

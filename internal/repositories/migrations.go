@@ -68,7 +68,7 @@ func AutoMigrate() error {
 
 	// Only create UUID extension for PostgreSQL
 	if os.Getenv("DB_DRIVER") == "postgres" {
-		if _, err := sqlDB.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
+		if _, err := sqlDB.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"); err != nil {
 			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
 		}
 	}
@@ -103,8 +103,17 @@ func RunMigrations(db *gorm.DB) error {
 
 	// Only create UUID extension for PostgreSQL
 	if os.Getenv("DB_DRIVER") == "postgres" {
+		// Create the extension in the public schema
 		if _, err := sqlDB.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
 			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
+		}
+		// Grant usage on the extension to public
+		if _, err := sqlDB.ExecContext(context.Background(), "GRANT USAGE ON SCHEMA public TO public;"); err != nil {
+			return fmt.Errorf("failed to grant usage on public schema: %w", err)
+		}
+		// Grant execute on all functions in the extension
+		if _, err := sqlDB.ExecContext(context.Background(), "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO public;"); err != nil {
+			return fmt.Errorf("failed to grant execute on functions: %w", err)
 		}
 	}
 

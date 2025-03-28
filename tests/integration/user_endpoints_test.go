@@ -1,21 +1,24 @@
 package integration
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/db"
+	"github.com/pageza/alchemorsel-v1/internal/handlers"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
+	"github.com/pageza/alchemorsel-v1/internal/services"
 	"gorm.io/gorm"
 )
 
@@ -31,12 +34,12 @@ func resetDB(t *testing.T, database *gorm.DB) {
 	}
 	// Re-insert dummy user required for certain endpoints.
 	dummyUser := models.User{
-		ID:       "1",
 		Name:     "Dummy User",
 		Email:    "dummy@example.com",
-		Password: "dummy",
+		Password: "Password123!",
 	}
-	if err := database.FirstOrCreate(&dummyUser, models.User{ID: "1"}).Error; err != nil {
+	userRepo := repositories.NewUserRepository(database)
+	if err := userRepo.CreateUser(context.Background(), &dummyUser); err != nil {
 		t.Fatalf("failed to insert dummy user: %v", err)
 	}
 }
@@ -68,6 +71,11 @@ func setupTestDB(t *testing.T) (*gin.Engine, *gorm.DB) {
 	os.Setenv("DB_DRIVER", "postgres")
 	os.Setenv("TEST_MODE", "true")
 	os.Setenv("DISABLE_RATE_LIMITER", "true")
+	// Note: The host and port are set by TestMain
+	os.Setenv("POSTGRES_USER", "postgres")
+	os.Setenv("POSTGRES_PASSWORD", "testpass")
+	os.Setenv("POSTGRES_DB", "testdb")
+	os.Setenv("JWT_SECRET", "testsecret")
 
 	// Initialize the database
 	config := db.NewConfig()
@@ -84,11 +92,21 @@ func setupTestDB(t *testing.T) (*gin.Engine, *gorm.DB) {
 	// Set Gin to test mode
 	gin.SetMode(gin.TestMode)
 
-	// Create test logger
-	logger := createTestLogger()
+	// Create a new Gin engine
+	router := gin.New()
+	router.Use(gin.Recovery())
 
-	// Initialize the router with the database and logger
-	return routes.SetupRouter(database, logger), database
+	// Create user repository and service
+	userRepo := repositories.NewUserRepository(database)
+	userService := services.NewUserService(userRepo)
+	userHandler := handlers.NewUserHandler(userService)
+
+	// Register user endpoints
+	router.POST("/v1/users", userHandler.CreateUser)
+	router.GET("/v1/users/:id", userHandler.GetUser)
+	router.POST("/v1/users/login", userHandler.LoginUser)
+
+	return router, database
 }
 
 func TestUserEndpoints(t *testing.T) {
@@ -96,51 +114,71 @@ func TestUserEndpoints(t *testing.T) {
 
 	t.Run("CreateUser_Success", func(t *testing.T) {
 		resetDB(t, database)
-		// Test user creation
-		req, _ := http.NewRequest("POST", "/v1/users", nil)
+		// Test user creation with required fields
+		newUser := models.User{
+			Name:     "Test User",
+			Email:    "testuser+" + generateRandomSuffix() + "@example.com",
+			Password: "Password123!",
+		}
+		payload, _ := json.Marshal(newUser)
+		req, _ := http.NewRequest("POST", "/v1/users", strings.NewReader(string(payload)))
+		req.Header.Set("Content-Type", "application/json")
 		resp := httptest.NewRecorder()
 		router.ServeHTTP(resp, req)
 
 		if resp.Code != http.StatusCreated {
-			t.Errorf("Expected status 201, got %d", resp.Code)
+			var errResp map[string]string
+			if err := json.NewDecoder(resp.Body).Decode(&errResp); err == nil {
+				t.Errorf("Expected status 201, got %d with error: %s", resp.Code, errResp["error"])
+			} else {
+				t.Errorf("Expected status 201, got %d", resp.Code)
+			}
 		}
 	})
 
 	t.Run("LoginUser_JWTTokenVerification", func(t *testing.T) {
 		resetDB(t, database)
 		// Prepare a new user payload with a unique email.
-		newUser := map[string]string{
-			"name":     "Test User",
-			"email":    "testuser+" + generateRandomSuffix() + "@example.com",
-			"password": "Password1!",
+		email := "testuser+" + generateRandomSuffix() + "@example.com"
+		newUser := models.User{
+			Name:     "Test User",
+			Email:    email,
+			Password: "Password123!",
 		}
 		// Create user and then perform login tests.
 		payload, _ := json.Marshal(newUser)
-		req1, _ := http.NewRequest("POST", "/v1/users", bytes.NewBuffer(payload))
+		req1, _ := http.NewRequest("POST", "/v1/users", strings.NewReader(string(payload)))
 		req1.Header.Set("Content-Type", "application/json")
 		w1 := httptest.NewRecorder()
 		router.ServeHTTP(w1, req1)
 		if w1.Code != http.StatusCreated {
-			t.Fatalf("failed to create user for login, got status %d", w1.Code)
+			var errResp map[string]string
+			if err := json.NewDecoder(w1.Body).Decode(&errResp); err == nil {
+				t.Fatalf("failed to create user for login, got status %d with error: %s", w1.Code, errResp["error"])
+			} else {
+				t.Fatalf("failed to create user for login, got status %d", w1.Code)
+			}
 		}
 
-		loginPayload := map[string]string{
-			"email":    "testuser+" + generateRandomSuffix() + "@example.com",
-			"password": "Password1!",
+		loginPayload := models.LoginRequest{
+			Email:    email,
+			Password: "Password123!",
 		}
 		payload, err := json.Marshal(loginPayload)
 		if err != nil {
 			t.Fatalf("failed to marshal login payload: %v", err)
 		}
-		req, err := http.NewRequest("POST", "/v1/users/login", bytes.NewBuffer(payload))
-		if err != nil {
-			t.Fatalf("failed to create login request: %v", err)
-		}
+		req, _ := http.NewRequest("POST", "/v1/users/login", strings.NewReader(string(payload)))
 		req.Header.Set("Content-Type", "application/json")
 		resp := httptest.NewRecorder()
 		router.ServeHTTP(resp, req)
 		if resp.Code != http.StatusOK {
-			t.Fatalf("expected status %d for login, got %d", http.StatusOK, resp.Code)
+			var errResp map[string]string
+			if err := json.NewDecoder(resp.Body).Decode(&errResp); err == nil {
+				t.Fatalf("expected status %d for login, got %d with error: %s", http.StatusOK, resp.Code, errResp["error"])
+			} else {
+				t.Fatalf("expected status %d for login, got %d", http.StatusOK, resp.Code)
+			}
 		}
 	})
 
@@ -151,43 +189,50 @@ func TestUserEndpoints(t *testing.T) {
 		defer os.Setenv("JWT_SECRET", originalSecret)
 
 		// Ensure the user exists.
-		newUser := map[string]string{
-			"name":     "Test User",
-			"email":    "testuser@example.com",
-			"password": "Password1!",
+		newUser := models.User{
+			Name:     "Test User",
+			Email:    "testuser@example.com",
+			Password: "Password123!",
 		}
 		payload, _ := json.Marshal(newUser)
-		req1, _ := http.NewRequest("POST", "/v1/users", bytes.NewBuffer(payload))
+		req1, _ := http.NewRequest("POST", "/v1/users", strings.NewReader(string(payload)))
 		req1.Header.Set("Content-Type", "application/json")
 		w1 := httptest.NewRecorder()
 		router.ServeHTTP(w1, req1)
 		if w1.Code != http.StatusCreated {
-			t.Fatalf("failed to create user for login, got status %d", w1.Code)
+			var errResp map[string]string
+			if err := json.NewDecoder(w1.Body).Decode(&errResp); err == nil {
+				t.Fatalf("failed to create user for login, got status %d with error: %s", w1.Code, errResp["error"])
+			} else {
+				t.Fatalf("failed to create user for login, got status %d", w1.Code)
+			}
 		}
 
-		loginPayload := map[string]string{
-			"email":    "testuser@example.com",
-			"password": "Password1!",
+		loginPayload := models.LoginRequest{
+			Email:    "testuser@example.com",
+			Password: "Password123!",
 		}
 		payload, err := json.Marshal(loginPayload)
 		if err != nil {
 			t.Fatalf("failed to marshal login payload: %v", err)
 		}
-		req, err := http.NewRequest("POST", "/v1/users/login", bytes.NewBuffer(payload))
-		if err != nil {
-			t.Fatalf("failed to create login request: %v", err)
-		}
+		req, _ := http.NewRequest("POST", "/v1/users/login", strings.NewReader(string(payload)))
 		req.Header.Set("Content-Type", "application/json")
 		resp := httptest.NewRecorder()
 		router.ServeHTTP(resp, req)
 		if resp.Code != http.StatusInternalServerError {
-			t.Errorf("expected status %d when JWT secret is missing, got %d", http.StatusInternalServerError, resp.Code)
+			var errResp map[string]string
+			if err := json.NewDecoder(resp.Body).Decode(&errResp); err == nil {
+				t.Errorf("expected status %d when JWT secret is missing, got %d with error: %s", http.StatusInternalServerError, resp.Code, errResp["error"])
+			} else {
+				t.Errorf("expected status %d when JWT secret is missing, got %d", http.StatusInternalServerError, resp.Code)
+			}
 		}
 	})
 
 	t.Run("GetUser_NotFound", func(t *testing.T) {
 		resetDB(t, database)
-		req, err := http.NewRequest("GET", "/v1/users/nonexistent-id", nil)
+		req, err := http.NewRequest("GET", "/v1/users/123e4567-e89b-12d3-a456-426614174001", nil)
 		if err != nil {
 			t.Fatalf("failed to create GET request: %v", err)
 		}

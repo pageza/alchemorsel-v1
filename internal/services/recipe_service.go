@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,6 +35,15 @@ func (s *RecipeService) GetRecipe(ctx context.Context, id string) (*models.Recip
 }
 
 func (s *RecipeService) SaveRecipe(ctx context.Context, recipe *models.Recipe) error {
+	if recipe == nil {
+		return errors.New("recipe cannot be nil")
+	}
+
+	// Validate required fields
+	if recipe.Title == "" {
+		return errors.New("recipe title is required")
+	}
+
 	// Ensure the recipe has a valid UUID.
 	if recipe.ID == "" {
 		recipe.ID = uuid.New().String()
@@ -56,6 +66,15 @@ func (s *RecipeService) ListRecipes(ctx context.Context) ([]*models.Recipe, erro
 }
 
 func (s *RecipeService) UpdateRecipe(ctx context.Context, recipe *models.Recipe) error {
+	if recipe == nil {
+		return errors.New("recipe cannot be nil")
+	}
+
+	// Validate required fields
+	if recipe.Title == "" {
+		return errors.New("recipe title is required")
+	}
+
 	return s.repo.UpdateRecipe(ctx, recipe)
 }
 

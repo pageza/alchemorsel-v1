@@ -89,34 +89,12 @@ func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 		recipe.Title = "Integration Created Recipe"
 	}
 
-	// Get ingredients and steps as strings
-	ingredients, err := recipe.GetIngredients()
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ingredients format"})
-		return
+	// Set default empty arrays for ingredients and steps if they're empty
+	if len(recipe.Ingredients) == 0 {
+		recipe.Ingredients = []byte("[]")
 	}
-	steps, err := recipe.GetSteps()
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid steps format"})
-		return
-	}
-
-	// Sanitize ingredients and steps
-	for i, ingredient := range ingredients {
-		ingredients[i] = strings.TrimSpace(ingredient)
-	}
-	for i, step := range steps {
-		steps[i] = strings.TrimSpace(step)
-	}
-
-	// Set sanitized ingredients and steps back
-	if err := recipe.SetIngredients(ingredients); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set ingredients"})
-		return
-	}
-	if err := recipe.SetSteps(steps); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set steps"})
-		return
+	if len(recipe.Steps) == 0 {
+		recipe.Steps = []byte("[]")
 	}
 
 	// Check if the candidate recipe has been approved.
@@ -129,6 +107,8 @@ func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 	zap.S().Infow("User-approved recipe received. Proceeding with save", "title", recipe.Title)
 
 	// Generate a text representation for embedding generation.
+	ingredients, _ := recipe.GetIngredients()
+	steps, _ := recipe.GetSteps()
 	recipeText := recipe.Title + " " + strings.Join(ingredients, " ") + " " + strings.Join(steps, " ")
 
 	// Skip embedding generation in test mode

@@ -36,7 +36,7 @@ func (f *Float64Slice) Scan(value interface{}) error {
 
 // Recipe represents a recipe in the application.
 type Recipe struct {
-	ID                string         `json:"id" gorm:"type:uuid;default:uuid_generate_v4();primaryKey"`
+	ID                string         `json:"id" gorm:"type:uuid;primaryKey"`
 	Title             string         `json:"title"`
 	Ingredients       datatypes.JSON `json:"ingredients" gorm:"type:json"` // Stored as a JSON array
 	Steps             datatypes.JSON `json:"steps" gorm:"type:json"`       // Stored as a JSON array
