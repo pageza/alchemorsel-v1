@@ -6,20 +6,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/handlers"
+	"github.com/pageza/alchemorsel-v1/internal/logging"
 	"github.com/pageza/alchemorsel-v1/internal/middleware"
-	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/services"
-
-	"strings"
-
-	"github.com/golang-jwt/jwt/v4"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 // SetupRouter initializes and returns the Gin router with all routes configured
-func SetupRouter(db *gorm.DB) *gin.Engine {
+func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
+	logger.Info("Starting router setup...")
+
 	// For integration tests, ensure we use the Postgres test database.
 	if os.Getenv("INTEGRATION_TEST") == "true" && os.Getenv("DB_DRIVER") == "" {
 		os.Setenv("DB_DRIVER", "postgres")
@@ -45,24 +43,28 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 			}
 		}
 
+		logger.Info("Setting up database extensions and migrations...")
 		// Create UUID extension and run migrations
 		sqlDB, err := db.DB()
 		if err != nil {
-			zap.S().Fatalf("failed to get underlying sql.DB: %v", err)
-		}
-		if _, err := sqlDB.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
-			zap.S().Warnf("failed to create uuid-ossp extension: %v", err)
-		}
-		if err := repositories.RunMigrations(db); err != nil {
-			zap.S().Fatalf("failed to run migrations: %v", err)
+			logger.Error("Failed to get underlying sql.DB", zap.Error(err))
+		} else {
+			if _, err := sqlDB.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
+				logger.Error("Failed to create uuid-ossp extension", zap.Error(err))
+			}
+			if err := repositories.RunMigrations(db); err != nil {
+				logger.Error("Failed to run migrations", zap.Error(err))
+			}
 		}
 	}
 
+	logger.Info("Initializing Gin router...")
 	router := gin.Default()
 	// Disable trailing slash redirection to prevent 301 redirects on endpoints.
 	router.RedirectTrailingSlash = false
 	router.Use(gin.Recovery())
 	router.Use(gin.Logger())
+	router.Use(logger.RequestIDMiddleware())
 
 	// Always add security headers unless explicitly disabled.
 	if os.Getenv("DISABLE_SECURITY_HEADERS") != "true" {
@@ -74,28 +76,7 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 		router.Use(middleware.RateLimiter())
 	}
 
-	// Conditionally add test authentication bypass middleware when in test mode.
-	if gin.Mode() == gin.TestMode {
-		router.Use(func(c *gin.Context) {
-			authHeader := c.GetHeader("Authorization")
-			if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
-				rawToken := strings.TrimPrefix(authHeader, "Bearer ")
-				secret := os.Getenv("JWT_SECRET")
-				parsedToken, err := jwt.Parse(rawToken, func(token *jwt.Token) (interface{}, error) {
-					return []byte(secret), nil
-				})
-				if err == nil && parsedToken.Valid {
-					if claims, ok := parsedToken.Claims.(jwt.MapClaims); ok {
-						if id, ok := claims["id"].(string); ok {
-							c.Set("currentUser", id)
-						}
-					}
-				}
-			}
-			c.Next()
-		})
-	}
-
+	logger.Info("Setting up routes...")
 	// Grouping versioned API routes
 	v1 := router.Group("/v1")
 	{
@@ -144,21 +125,6 @@ func SetupRouter(db *gorm.DB) *gin.Engine {
 		v1.GET("/health", handlers.HealthCheck)
 	}
 
-	// For test or integration environments, clear users and insert a dummy user.
-	if gin.Mode() == gin.TestMode || os.Getenv("INTEGRATION_TEST") == "true" {
-		if err := db.Exec("DELETE FROM users").Error; err != nil {
-			zap.S().Fatal("failed to clear users table")
-		}
-		dummyUser := models.User{
-			ID:       "1",
-			Name:     "Dummy User",
-			Email:    "dummy@example.com",
-			Password: "dummy", // Replace with a hashed password in production if needed.
-		}
-		if err := db.FirstOrCreate(&dummyUser, models.User{ID: "1"}).Error; err != nil {
-			zap.S().Fatal("failed to create dummy user")
-		}
-	}
-
+	logger.Info("Router setup complete")
 	return router
 }

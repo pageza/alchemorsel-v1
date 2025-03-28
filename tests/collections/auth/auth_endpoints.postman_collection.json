@@ -1,0 +1,229 @@
+{
+  "info": {
+    "name": "Auth Endpoints",
+    "description": "Collection for testing authentication-related endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Register User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"email\": \"test@example.com\",\n    \"password\": \"Test123!@#\",\n    \"name\": \"Test User\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/auth/register",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "auth", "register"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test(\"User registered successfully\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('id');",
+              "    pm.expect(response).to.have.property('email');",
+              "    pm.expect(response).to.have.property('name');",
+              "    pm.expect(response).to.have.property('created_at');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Login User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"email\": \"test@example.com\",\n    \"password\": \"Test123!@#\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/auth/login",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "auth", "login"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"User logged in successfully\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('token');",
+              "    pm.expect(response).to.have.property('refresh_token');",
+              "    pm.expect(response).to.have.property('expires_in');",
+              "    pm.expect(response).to.have.property('token_type');",
+              "    pm.expect(response.token_type).to.equal('Bearer');",
+              "});",
+              "",
+              "pm.test(\"Store token for future requests\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.environment.set('token', response.token);",
+              "    pm.environment.set('refresh_token', response.refresh_token);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Refresh Token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"refresh_token\": \"{{refresh_token}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/auth/refresh",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "auth", "refresh"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Token refreshed successfully\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('token');",
+              "    pm.expect(response).to.have.property('refresh_token');",
+              "    pm.expect(response).to.have.property('expires_in');",
+              "    pm.expect(response).to.have.property('token_type');",
+              "    pm.expect(response.token_type).to.equal('Bearer');",
+              "});",
+              "",
+              "pm.test(\"Update stored tokens\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.environment.set('token', response.token);",
+              "    pm.environment.set('refresh_token', response.refresh_token);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Logout User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/v1/auth/logout",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "auth", "logout"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"User logged out successfully\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('message');",
+              "    pm.expect(response.message).to.include('logged out');",
+              "});",
+              "",
+              "pm.test(\"Clear stored tokens\", function () {",
+              "    pm.environment.unset('token');",
+              "    pm.environment.unset('refresh_token');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Verify Token",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/v1/auth/verify",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "auth", "verify"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Token verified successfully\", function () {",
+              "    const response = pm.response.json();",
+              "    pm.expect(response).to.have.property('valid');",
+              "    pm.expect(response.valid).to.equal(true);",
+              "    pm.expect(response).to.have.property('user');",
+              "    pm.expect(response.user).to.have.property('id');",
+              "    pm.expect(response.user).to.have.property('email');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+} 

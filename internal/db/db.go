@@ -3,8 +3,8 @@ package db
 import (
 	"fmt"
 	"os"
-	"time"
 
+	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -19,61 +19,69 @@ type Config struct {
 	User     string
 	Password string
 	DBName   string
+	SSLMode  string
 }
 
 // NewConfig creates a new database configuration from environment variables
 func NewConfig() *Config {
 	return &Config{
-		Host:     getEnvOrDefault("POSTGRES_HOST", "localhost"),
-		Port:     getEnvOrDefault("POSTGRES_PORT", "5432"),
-		User:     getEnvOrDefault("POSTGRES_USER", "postgres"),
-		Password: getEnvOrDefault("POSTGRES_PASSWORD", ""),
-		DBName:   getEnvOrDefault("POSTGRES_DB", "recipesdb"),
+		Host:     os.Getenv("POSTGRES_HOST"),
+		Port:     os.Getenv("POSTGRES_PORT"),
+		User:     os.Getenv("POSTGRES_USER"),
+		Password: os.Getenv("POSTGRES_PASSWORD"),
+		DBName:   os.Getenv("POSTGRES_DB"),
+		SSLMode:  "disable",
 	}
 }
 
-// getEnvOrDefault returns the value of an environment variable or a default value
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-// InitDB initializes a new database connection with the given configuration
+// InitDB initializes the database connection
 func InitDB(config *Config) (*gorm.DB, error) {
+	logger := zap.L()
+
 	dsn := fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		config.Host,
+		config.Port,
 		config.User,
 		config.Password,
 		config.DBName,
-		config.Port,
+		config.SSLMode,
 	)
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	gormLogger := NewGormLogger(logger)
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: gormLogger,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		logger.Error("failed to connect to database",
+			zap.Error(err),
+			zap.String("host", config.Host),
+			zap.String("port", config.Port),
+			zap.String("dbname", config.DBName))
+		return nil, err
 	}
-
-	// Get the underlying SQL DB
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get database instance: %w", err)
-	}
-
-	// Set connection pool settings
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
-	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	// Test the connection
-	if err := sqlDB.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+	sqlDB, err := db.DB()
+	if err != nil {
+		logger.Error("failed to get database instance",
+			zap.Error(err))
+		return nil, err
 	}
+
+	err = sqlDB.Ping()
+	if err != nil {
+		logger.Error("failed to ping database",
+			zap.Error(err))
+		return nil, err
+	}
+
+	logger.Info("successfully connected to database",
+		zap.String("host", config.Host),
+		zap.String("port", config.Port),
+		zap.String("dbname", config.DBName))
 
 	// Set the global DB instance
 	DB = db
-	fmt.Println("Successfully connected to database")
 	return db, nil
 }

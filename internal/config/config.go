@@ -291,16 +291,13 @@ func getEnvBoolOrDefault(key string, defaultValue bool) bool {
 	return defaultValue
 }
 
-// LoadConfig loads environment variables from a .env file.
+// LoadConfig loads configuration from environment files and environment variables
 func LoadConfig() error {
-	// Load .env file based on environment
-	env := getEnvOrDefault("APP_ENV", "development")
-	envFile := fmt.Sprintf(".env.%s", env)
-
-	if err := godotenv.Load(envFile); err != nil {
-		log.Printf("No %s file found, falling back to default .env file", envFile)
-		if err := godotenv.Load(); err != nil {
-			log.Println("No .env file found, relying on environment variables.")
+	// Try to load .env.development first
+	if err := godotenv.Load(".env.development"); err != nil {
+		// If .env.development doesn't exist, try .env
+		if err := godotenv.Load(".env"); err != nil {
+			log.Println("No .env file found, relying on environment variables")
 		}
 	}
 	return nil

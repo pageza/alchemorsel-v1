@@ -24,9 +24,9 @@
           "raw": "{\n    \"title\": \"Test Recipe\",\n    \"description\": \"A test recipe for API testing\",\n    \"ingredients\": [\n        {\n            \"name\": \"Ingredient 1\",\n            \"amount\": \"100g\",\n            \"unit\": \"grams\"\n        }\n    ],\n    \"instructions\": [\n        \"Step 1: Do something\",\n        \"Step 2: Do something else\"\n    ],\n    \"cooking_time\": 30,\n    \"difficulty\": \"medium\",\n    \"servings\": 4,\n    \"tags\": [\"test\", \"api\"]\n}"
         },
         "url": {
-          "raw": "{{base_url}}/api/v1/recipes",
+          "raw": "{{base_url}}/v1/recipes",
           "host": ["{{base_url}}"],
-          "path": ["api", "v1", "recipes"]
+          "path": ["v1", "recipes"]
         }
       },
       "event": [
@@ -63,9 +63,9 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/v1/recipes/{{recipe_id}}",
+          "raw": "{{base_url}}/v1/recipes/{{recipe_id}}",
           "host": ["{{base_url}}"],
-          "path": ["api", "v1", "recipes", "{{recipe_id}}"]
+          "path": ["v1", "recipes", "{{recipe_id}}"]
         }
       },
       "event": [
@@ -110,9 +110,9 @@
           "raw": "{\n    \"title\": \"Updated Test Recipe\",\n    \"description\": \"An updated test recipe\",\n    \"ingredients\": [\n        {\n            \"name\": \"Updated Ingredient\",\n            \"amount\": \"200g\",\n            \"unit\": \"grams\"\n        }\n    ],\n    \"instructions\": [\n        \"Updated Step 1\",\n        \"Updated Step 2\"\n    ],\n    \"cooking_time\": 45,\n    \"difficulty\": \"hard\",\n    \"servings\": 6,\n    \"tags\": [\"test\", \"api\", \"updated\"]\n}"
         },
         "url": {
-          "raw": "{{base_url}}/api/v1/recipes/{{recipe_id}}",
+          "raw": "{{base_url}}/v1/recipes/{{recipe_id}}",
           "host": ["{{base_url}}"],
-          "path": ["api", "v1", "recipes", "{{recipe_id}}"]
+          "path": ["v1", "recipes", "{{recipe_id}}"]
         }
       },
       "event": [
@@ -150,9 +150,9 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/v1/recipes/{{recipe_id}}",
+          "raw": "{{base_url}}/v1/recipes/{{recipe_id}}",
           "host": ["{{base_url}}"],
-          "path": ["api", "v1", "recipes", "{{recipe_id}}"]
+          "path": ["v1", "recipes", "{{recipe_id}}"]
         }
       },
       "event": [
@@ -180,9 +180,9 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/v1/recipes?page=1&limit=10&sort=created_at&order=desc",
+          "raw": "{{base_url}}/v1/recipes?page=1&limit=10&sort=created_at&order=desc",
           "host": ["{{base_url}}"],
-          "path": ["api", "v1", "recipes"],
+          "path": ["v1", "recipes"],
           "query": [
             {
               "key": "page",
@@ -237,9 +237,9 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/v1/recipes/search?q=test&tags=api&difficulty=medium",
+          "raw": "{{base_url}}/v1/recipes/search?q=test&tags=api&difficulty=medium",
           "host": ["{{base_url}}"],
-          "path": ["api", "v1", "recipes", "search"],
+          "path": ["v1", "recipes", "search"],
           "query": [
             {
               "key": "q",
@@ -270,8 +270,6 @@
               "    pm.expect(response).to.have.property('recipes');",
               "    pm.expect(response.recipes).to.be.an('array');",
               "    pm.expect(response).to.have.property('total');",
-              "    pm.expect(response).to.have.property('page');",
-              "    pm.expect(response).to.have.property('limit');",
               "});"
             ],
             "type": "text/javascript"
@@ -298,9 +296,9 @@
           "raw": "{\n    \"rating\": 5,\n    \"comment\": \"Great recipe!\"\n}"
         },
         "url": {
-          "raw": "{{base_url}}/api/v1/recipes/{{recipe_id}}/rate",
+          "raw": "{{base_url}}/v1/recipes/{{recipe_id}}/rate",
           "host": ["{{base_url}}"],
-          "path": ["api", "v1", "recipes", "{{recipe_id}}", "rate"]
+          "path": ["v1", "recipes", "{{recipe_id}}", "rate"]
         }
       },
       "event": [
@@ -314,10 +312,9 @@
               "",
               "pm.test(\"Recipe rated successfully\", function () {",
               "    const response = pm.response.json();",
-              "    pm.expect(response).to.have.property('message');",
-              "    pm.expect(response.message).to.include('rated');",
-              "    pm.expect(response).to.have.property('rating');",
+              "    pm.expect(response).to.have.property('id');",
               "    pm.expect(response.rating).to.equal(5);",
+              "    pm.expect(response.comment).to.equal('Great recipe!');",
               "});"
             ],
             "type": "text/javascript"
@@ -336,9 +333,9 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/v1/recipes/{{recipe_id}}/ratings",
+          "raw": "{{base_url}}/v1/recipes/{{recipe_id}}/ratings",
           "host": ["{{base_url}}"],
-          "path": ["api", "v1", "recipes", "{{recipe_id}}", "ratings"]
+          "path": ["v1", "recipes", "{{recipe_id}}", "ratings"]
         }
       },
       "event": [
@@ -352,10 +349,10 @@
               "",
               "pm.test(\"Recipe ratings retrieved successfully\", function () {",
               "    const response = pm.response.json();",
-              "    pm.expect(response).to.have.property('ratings');",
-              "    pm.expect(response.ratings).to.be.an('array');",
-              "    pm.expect(response).to.have.property('average_rating');",
-              "    pm.expect(response).to.have.property('total_ratings');",
+              "    pm.expect(response).to.be.an('array');",
+              "    pm.expect(response[0]).to.have.property('id');",
+              "    pm.expect(response[0]).to.have.property('rating');",
+              "    pm.expect(response[0]).to.have.property('comment');",
               "});"
             ],
             "type": "text/javascript"

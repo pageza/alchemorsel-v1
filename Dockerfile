@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git
@@ -17,7 +17,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o main .
+RUN CGO_ENABLED=0 GOOS=linux go build -o main ./cmd/app
 
 # Security scanning stage
 FROM aquasec/trivy:latest AS trivy
@@ -43,7 +43,12 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /app/main .
-COPY --from=builder /app/.env .
+
+# Copy migrations directory
+COPY --from=builder /app/internal/migrations /app/internal/migrations
+
+# Copy environment file
+COPY --from=builder /app/.env.development ./.env.development
 
 # Use non-root user
 USER appuser
@@ -51,9 +56,9 @@ USER appuser
 # Expose port
 EXPOSE 8080
 
-# Add health check
+# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/v1/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Run the application
 CMD ["./main"] 

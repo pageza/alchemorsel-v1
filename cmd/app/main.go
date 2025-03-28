@@ -1,72 +1,85 @@
 package main
 
 import (
-	"log"
-	"strings"
 	"time"
 
 	"github.com/pageza/alchemorsel-v1/internal/config"
 	"github.com/pageza/alchemorsel-v1/internal/db"
+	"github.com/pageza/alchemorsel-v1/internal/logging"
 	"github.com/pageza/alchemorsel-v1/internal/migrations"
-	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 func main() {
+	// Initialize logger with console-only output
+	logConfig := logging.LogConfig{
+		LogLevel:      "debug",
+		LogFormat:     "json",
+		EnableConsole: true,
+		EnableFile:    false, // Disable file logging
+	}
+	logger, err := logging.NewLogger(logConfig)
+	if err != nil {
+		panic("failed to initialize logger: " + err.Error())
+	}
+
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Recovered from panic: %v", r)
+			logger.Error("Recovered from panic", zap.Any("panic", r))
 		}
 	}()
 
+	logger.Info("Starting application...")
+
 	// Load configuration from .env file
 	if err := config.LoadConfig(); err != nil {
-		log.Fatalf("Error loading config: %v", err)
+		logger.Fatal("Error loading config", zap.Error(err))
 	}
+	logger.Info("Configuration loaded successfully")
 
 	// Initialize the database connection with retry logic
 	var database *gorm.DB
-	var err error
 	maxAttempts := 10
 	for i := 1; i <= maxAttempts; i++ {
 		config := db.NewConfig()
 		database, err = db.InitDB(config)
 		if err == nil {
+			logger.Info("Successfully connected to database")
 			break
 		}
-		log.Printf("Attempt %d: error initializing database: %v", i, err)
+		logger.Warn("Failed to connect to database",
+			zap.Int("attempt", i),
+			zap.Int("maxAttempts", maxAttempts),
+			zap.Error(err))
 		time.Sleep(5 * time.Second)
 	}
 	if err != nil {
-		log.Fatalf("Error initializing database after %d attempts: %v", maxAttempts, err)
-	}
-
-	// Check and drop legacy constraint 'uni_users_email' if it exists
-	if database.Migrator().HasConstraint(&models.User{}, "uni_users_email") {
-		log.Println("Legacy constraint 'uni_users_email' exists, dropping it...")
-		if err := database.Migrator().DropConstraint(&models.User{}, "uni_users_email"); err != nil {
-			log.Printf("Error dropping legacy constraint: %v", err)
-		} else {
-			log.Println("Legacy constraint dropped successfully.")
-		}
-	} else {
-		log.Println("Legacy constraint 'uni_users_email' does not exist; no drop needed.")
+		logger.Fatal("Error initializing database after max attempts",
+			zap.Int("maxAttempts", maxAttempts),
+			zap.Error(err))
 	}
 
 	// Run migrations
-	if err := migrations.RunMigrations(database); err != nil {
-		if strings.Contains(err.Error(), "uni_users_email") {
-			log.Printf("Ignoring legacy drop error: %v", err)
-		} else {
-			log.Fatalf("Error running migrations: %v", err)
-		}
+	if err := migrations.RunSQLMigrations(); err != nil {
+		logger.Warn("Migration warning (continuing)", zap.Error(err))
 	}
+	logger.Info("Migrations completed")
 
 	// Setup and start the Gin router with database dependency
-	router := routes.SetupRouter(database)
-	log.Println("Starting server on :8080")
-	err = router.Run(":8080")
-	log.Printf("router.Run returned with error: %v", err)
-	log.Println("Server exiting")
+	logger.Info("Setting up router...")
+	router := routes.SetupRouter(database, logger)
+	logger.Info("Router setup complete")
+
+	logger.Info("Starting server", zap.String("address", "0.0.0.0:8080"))
+	logger.Debug("Server configuration",
+		zap.String("host", "0.0.0.0"),
+		zap.String("port", "8080"),
+		zap.Any("routes", router.Routes()))
+
+	if err := router.Run("0.0.0.0:8080"); err != nil {
+		logger.Fatal("Server error", zap.Error(err))
+	}
+	logger.Info("Server exiting")
 }
