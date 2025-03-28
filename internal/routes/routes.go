@@ -83,10 +83,18 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
 		// Initialize repositories
 		userRepo := repositories.NewUserRepository(db)
 		recipeRepo := repositories.NewRecipeRepository(db)
+		cuisineRepo := repositories.NewCuisineRepository(db)
+		dietRepo := repositories.NewDietRepository(db)
+		applianceRepo := repositories.NewApplianceRepository(db)
+		tagRepo := repositories.NewTagRepository(db)
 
 		// Initialize services
 		userService := services.NewUserService(userRepo)
-		recipeService := services.NewRecipeService(recipeRepo)
+		cuisineService := services.NewCuisineService(cuisineRepo)
+		dietService := services.NewDietService(dietRepo)
+		applianceService := services.NewApplianceService(applianceRepo)
+		tagService := services.NewTagService(tagRepo)
+		recipeService := services.NewRecipeService(recipeRepo, cuisineService, dietService, applianceService, tagService)
 
 		// Initialize handlers
 		userHandler := handlers.NewUserHandler(userService)

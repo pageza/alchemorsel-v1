@@ -10,6 +10,91 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Mock services
+type MockCuisineService struct{}
+
+func (m *MockCuisineService) GetByID(ctx context.Context, id string) (*models.Cuisine, error) {
+	return &models.Cuisine{ID: id, Name: "test"}, nil
+}
+func (m *MockCuisineService) GetByName(ctx context.Context, name string) (*models.Cuisine, error) {
+	return &models.Cuisine{ID: "test-id", Name: name}, nil
+}
+func (m *MockCuisineService) Create(ctx context.Context, cuisine *models.Cuisine) error {
+	return nil
+}
+func (m *MockCuisineService) List(ctx context.Context) ([]*models.Cuisine, error) {
+	return []*models.Cuisine{}, nil
+}
+func (m *MockCuisineService) Delete(ctx context.Context, id string) error {
+	return nil
+}
+func (m *MockCuisineService) GetOrCreate(ctx context.Context, name string) (*models.Cuisine, error) {
+	return &models.Cuisine{ID: "test-id", Name: name}, nil
+}
+
+type MockDietService struct{}
+
+func (m *MockDietService) GetByID(ctx context.Context, id string) (*models.Diet, error) {
+	return &models.Diet{ID: id, Name: "test"}, nil
+}
+func (m *MockDietService) GetByName(ctx context.Context, name string) (*models.Diet, error) {
+	return &models.Diet{ID: "test-id", Name: name}, nil
+}
+func (m *MockDietService) Create(ctx context.Context, diet *models.Diet) error {
+	return nil
+}
+func (m *MockDietService) List(ctx context.Context) ([]*models.Diet, error) {
+	return []*models.Diet{}, nil
+}
+func (m *MockDietService) Delete(ctx context.Context, id string) error {
+	return nil
+}
+func (m *MockDietService) GetOrCreate(ctx context.Context, name string) (*models.Diet, error) {
+	return &models.Diet{ID: "test-id", Name: name}, nil
+}
+
+type MockApplianceService struct{}
+
+func (m *MockApplianceService) GetByID(ctx context.Context, id string) (*models.Appliance, error) {
+	return &models.Appliance{ID: id, Name: "test"}, nil
+}
+func (m *MockApplianceService) GetByName(ctx context.Context, name string) (*models.Appliance, error) {
+	return &models.Appliance{ID: "test-id", Name: name}, nil
+}
+func (m *MockApplianceService) Create(ctx context.Context, appliance *models.Appliance) error {
+	return nil
+}
+func (m *MockApplianceService) List(ctx context.Context) ([]*models.Appliance, error) {
+	return []*models.Appliance{}, nil
+}
+func (m *MockApplianceService) Delete(ctx context.Context, id string) error {
+	return nil
+}
+func (m *MockApplianceService) GetOrCreate(ctx context.Context, name string) (*models.Appliance, error) {
+	return &models.Appliance{ID: "test-id", Name: name}, nil
+}
+
+type MockTagService struct{}
+
+func (m *MockTagService) GetByID(ctx context.Context, id string) (*models.Tag, error) {
+	return &models.Tag{ID: id, Name: "test"}, nil
+}
+func (m *MockTagService) GetByName(ctx context.Context, name string) (*models.Tag, error) {
+	return &models.Tag{ID: "test-id", Name: name}, nil
+}
+func (m *MockTagService) Create(ctx context.Context, tag *models.Tag) error {
+	return nil
+}
+func (m *MockTagService) List(ctx context.Context) ([]*models.Tag, error) {
+	return []*models.Tag{}, nil
+}
+func (m *MockTagService) Delete(ctx context.Context, id string) error {
+	return nil
+}
+func (m *MockTagService) GetOrCreate(ctx context.Context, name string) (*models.Tag, error) {
+	return &models.Tag{ID: "test-id", Name: name}, nil
+}
+
 // func TestListRecipes(t *testing.T) {
 // 	recipes, err := services.ListRecipes()
 // 	if err == nil {
@@ -80,13 +165,19 @@ func TestSaveRecipeSuccess(t *testing.T) {
 		},
 	}
 
+	// Create mock services
+	mockCuisineService := &MockCuisineService{}
+	mockDietService := &MockDietService{}
+	mockApplianceService := &MockApplianceService{}
+	mockTagService := &MockTagService{}
+
 	// Create a new recipe with minimal fields.
 	recipe := &models.Recipe{
 		Title: "Test Recipe",
 	}
 
-	// Instantiate the service with the mock repository.
-	service := services.NewRecipeService(mockRepo)
+	// Instantiate the service with the mock repository and services.
+	service := services.NewRecipeService(mockRepo, mockCuisineService, mockDietService, mockApplianceService, mockTagService)
 
 	err := service.SaveRecipe(context.Background(), recipe)
 	assert.Nil(t, err, "Expected no error on saving recipe")
@@ -98,7 +189,12 @@ func TestSaveRecipeSuccess(t *testing.T) {
 
 func TestSaveRecipeValidation(t *testing.T) {
 	mockRepo := &MockRecipeRepository{}
-	service := services.NewRecipeService(mockRepo)
+	mockCuisineService := &MockCuisineService{}
+	mockDietService := &MockDietService{}
+	mockApplianceService := &MockApplianceService{}
+	mockTagService := &MockTagService{}
+
+	service := services.NewRecipeService(mockRepo, mockCuisineService, mockDietService, mockApplianceService, mockTagService)
 
 	tests := []struct {
 		name    string
@@ -143,7 +239,12 @@ func TestSaveRecipeDBError(t *testing.T) {
 		},
 	}
 
-	service := services.NewRecipeService(mockRepo)
+	mockCuisineService := &MockCuisineService{}
+	mockDietService := &MockDietService{}
+	mockApplianceService := &MockApplianceService{}
+	mockTagService := &MockTagService{}
+
+	service := services.NewRecipeService(mockRepo, mockCuisineService, mockDietService, mockApplianceService, mockTagService)
 	recipe := &models.Recipe{
 		Title: "Test Recipe",
 	}
@@ -166,7 +267,12 @@ func TestGetRecipe(t *testing.T) {
 		},
 	}
 
-	service := services.NewRecipeService(mockRepo)
+	mockCuisineService := &MockCuisineService{}
+	mockDietService := &MockDietService{}
+	mockApplianceService := &MockApplianceService{}
+	mockTagService := &MockTagService{}
+
+	service := services.NewRecipeService(mockRepo, mockCuisineService, mockDietService, mockApplianceService, mockTagService)
 
 	tests := []struct {
 		name    string
@@ -217,7 +323,12 @@ func TestListRecipes(t *testing.T) {
 		},
 	}
 
-	service := services.NewRecipeService(mockRepo)
+	mockCuisineService := &MockCuisineService{}
+	mockDietService := &MockDietService{}
+	mockApplianceService := &MockApplianceService{}
+	mockTagService := &MockTagService{}
+
+	service := services.NewRecipeService(mockRepo, mockCuisineService, mockDietService, mockApplianceService, mockTagService)
 
 	recipes, err := service.ListRecipes(context.Background())
 	assert.NoError(t, err)
@@ -231,7 +342,12 @@ func TestListRecipesError(t *testing.T) {
 		},
 	}
 
-	service := services.NewRecipeService(mockRepo)
+	mockCuisineService := &MockCuisineService{}
+	mockDietService := &MockDietService{}
+	mockApplianceService := &MockApplianceService{}
+	mockTagService := &MockTagService{}
+
+	service := services.NewRecipeService(mockRepo, mockCuisineService, mockDietService, mockApplianceService, mockTagService)
 
 	recipes, err := service.ListRecipes(context.Background())
 	assert.Error(t, err)
@@ -245,7 +361,12 @@ func TestUpdateRecipe(t *testing.T) {
 		},
 	}
 
-	service := services.NewRecipeService(mockRepo)
+	mockCuisineService := &MockCuisineService{}
+	mockDietService := &MockDietService{}
+	mockApplianceService := &MockApplianceService{}
+	mockTagService := &MockTagService{}
+
+	service := services.NewRecipeService(mockRepo, mockCuisineService, mockDietService, mockApplianceService, mockTagService)
 
 	tests := []struct {
 		name    string
@@ -296,7 +417,12 @@ func TestDeleteRecipe(t *testing.T) {
 		},
 	}
 
-	service := services.NewRecipeService(mockRepo)
+	mockCuisineService := &MockCuisineService{}
+	mockDietService := &MockDietService{}
+	mockApplianceService := &MockApplianceService{}
+	mockTagService := &MockTagService{}
+
+	service := services.NewRecipeService(mockRepo, mockCuisineService, mockDietService, mockApplianceService, mockTagService)
 
 	tests := []struct {
 		name    string
