@@ -62,7 +62,7 @@ func main() {
 	}
 
 	// Run migrations
-	if err := migrations.RunSQLMigrations(); err != nil {
+	if err := migrations.RunMigrations(database); err != nil {
 		logger.Warn("Migration warning (continuing)", zap.Error(err))
 	}
 	logger.Info("Migrations completed")

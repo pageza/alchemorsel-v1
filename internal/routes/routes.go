@@ -44,16 +44,13 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
 		}
 
 		logger.Info("Setting up database extensions and migrations...")
-		// Create UUID extension and run migrations
+		// Create UUID extension
 		sqlDB, err := db.DB()
 		if err != nil {
 			logger.Error("Failed to get underlying sql.DB", zap.Error(err))
 		} else {
 			if _, err := sqlDB.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
 				logger.Error("Failed to create uuid-ossp extension", zap.Error(err))
-			}
-			if err := repositories.RunMigrations(db); err != nil {
-				logger.Error("Failed to run migrations", zap.Error(err))
 			}
 		}
 	}
@@ -103,16 +100,11 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
 			{
 				// Add all routes except login to the rate-limited group
 				noRateLimit.GET("/v1/health", handlers.HealthCheck)
-				noRateLimit.POST("/v1/users", userHandler.CreateUser)
-				noRateLimit.GET("/v1/users/verify-email/:token", userHandler.VerifyEmail)
-				noRateLimit.POST("/v1/users/forgot-password", userHandler.ForgotPassword)
-				noRateLimit.POST("/v1/users/reset-password", userHandler.ResetPassword)
-				noRateLimit.GET("/v1/users/:id", userHandler.GetUser)
 			}
 		}
 
 		// Public user endpoints for registration, login and account management
-		v1.POST("/users", userHandler.CreateUser)
+		v1.POST("/users", middleware.RateLimiter(), userHandler.CreateUser)
 		v1.POST("/users/login", middleware.LoginRateLimiter(), userHandler.LoginUser)
 		v1.GET("/users/verify-email/:token", userHandler.VerifyEmail)
 		v1.POST("/users/forgot-password", userHandler.ForgotPassword)

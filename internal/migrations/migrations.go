@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -26,7 +27,13 @@ func RunMigrations(db *gorm.DB) error {
 	}
 
 	// Create a new migrate instance
-	m, err := migrate.New("file://migrations", db.Dialector.Name())
+	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		os.Getenv("POSTGRES_USER"),
+		os.Getenv("POSTGRES_PASSWORD"),
+		os.Getenv("POSTGRES_HOST"),
+		os.Getenv("POSTGRES_PORT"),
+		os.Getenv("POSTGRES_DB"))
+	m, err := migrate.New("file:///app/migrations", dbURL)
 	if err != nil {
 		return fmt.Errorf("failed to create migrate instance: %w", err)
 	}
@@ -75,7 +82,7 @@ func RunMigrations(db *gorm.DB) error {
 
 // RollbackMigrations rolls back the last migration
 func RollbackMigrations(db *gorm.DB) error {
-	m, err := migrate.New("file://migrations", db.Dialector.Name())
+	m, err := migrate.New("file:///app/migrations", db.Dialector.Name())
 	if err != nil {
 		return fmt.Errorf("failed to create migrate instance: %w", err)
 	}
