@@ -30,7 +30,7 @@ func RunSQLMigrations() error {
 
 	maxAttempts := 10
 	for i := 1; i <= maxAttempts; i++ {
-		m, err = migrate.New("file:///app/internal/migrations", dsn)
+		m, err = migrate.New("file:///app/migrations", dsn)
 		if err != nil {
 			logger.Error("failed to create migrate instance",
 				zap.Int("attempt", i),

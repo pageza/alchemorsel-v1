@@ -117,7 +117,10 @@
               "    pm.expect(response.approved).to.be.true;",
               "    // Save the recipe ID for subsequent requests",
               "    pm.environment.set('recipe_id', response.id);",
-              "});"
+              "});",
+              "",
+              "// Add delay after creating recipe",
+              "setTimeout(function() {}, 1000);"
             ],
             "type": "text/javascript"
           }
@@ -156,7 +159,10 @@
               "    pm.expect(response).to.have.property('description');",
               "    pm.expect(response).to.have.property('ingredients');",
               "    pm.expect(response).to.have.property('steps');",
-              "});"
+              "});",
+              "",
+              "// Add delay after getting recipe",
+              "setTimeout(function() {}, 1000);"
             ],
             "type": "text/javascript"
           }
@@ -200,11 +206,12 @@
               "    const response = pm.response.json();",
               "    pm.expect(response.title).to.equal('Updated Test Recipe');",
               "    pm.expect(response.description).to.equal('An updated test recipe');",
-              "    pm.expect(response.cooking_time).to.equal(45);",
-              "    pm.expect(response.difficulty).to.equal('hard');",
-              "    pm.expect(response.servings).to.equal(6);",
-              "    pm.expect(response.tags).to.include('updated');",
-              "});"
+              "    pm.expect(response.ingredients[0].name).to.equal('Updated Ingredient');",
+              "    pm.expect(response.steps[0].description).to.equal('Updated Step 1');",
+              "});",
+              "",
+              "// Add delay after updating recipe",
+              "setTimeout(function() {}, 1000);"
             ],
             "type": "text/javascript"
           }

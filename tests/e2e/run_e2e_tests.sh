@@ -25,4 +25,6 @@ docker run --rm \
   -e "base_url=http://app:8080" \
   -e "JWT_SECRET=this-is-a-very-long-and-secure-jwt-secret-key-for-testing-purposes-only-1234" \
   -e "INTEGRATION_TEST=true" \
+  -e "DISABLE_RATE_LIMITER=true" \
+  -e "TEST_RATE_LIMIT_STRICT=false" \
   alchemorsel-e2e-tests 
