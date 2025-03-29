@@ -136,9 +136,20 @@ func TestSaveRecipeHandler(t *testing.T) {
 
 	// Create a valid JSON payload with all required fields
 	payload := map[string]interface{}{
-		"title":              "New Recipe",
-		"ingredients":        []string{"ingredient1", "ingredient2"},
-		"steps":              []string{"step1", "step2"},
+		"title": "New Recipe",
+		"ingredients": []map[string]interface{}{
+			{
+				"name":   "ingredient1",
+				"amount": "1",
+				"unit":   "cup",
+			},
+		},
+		"steps": []map[string]interface{}{
+			{
+				"order":       1,
+				"description": "step1",
+			},
+		},
 		"nutritional_info":   "",
 		"allergy_disclaimer": "",
 		"embedding":          []float64{},
@@ -160,8 +171,19 @@ func TestSaveRecipeHandler(t *testing.T) {
 		recipe.CreatedAt = time.Now()
 		recipe.UpdatedAt = time.Now()
 		// Set ingredients and steps
-		ingredientsJSON, _ := json.Marshal([]string{"ingredient1", "ingredient2"})
-		stepsJSON, _ := json.Marshal([]string{"step1", "step2"})
+		ingredientsJSON, _ := json.Marshal([]map[string]interface{}{
+			{
+				"name":   "ingredient1",
+				"amount": "1",
+				"unit":   "cup",
+			},
+		})
+		stepsJSON, _ := json.Marshal([]map[string]interface{}{
+			{
+				"order":       1,
+				"description": "step1",
+			},
+		})
 		recipe.Ingredients = datatypes.JSON(ingredientsJSON)
 		recipe.Steps = datatypes.JSON(stepsJSON)
 	}).Return(nil)

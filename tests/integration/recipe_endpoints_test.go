@@ -62,7 +62,23 @@ func TestIntegrationGetRecipe(t *testing.T) {
 	router := routes.SetupRouter(database, logger)
 
 	// Create a recipe
-	postBody := `{"title": "Integration Test Recipe Get", "ingredients": ["ing"], "steps": ["s"], "approved": true}`
+	postBody := `{
+		"title": "Integration Test Recipe Get",
+		"ingredients": [
+			{
+				"name": "ingredient1",
+				"amount": "1",
+				"unit": "cup"
+			}
+		],
+		"steps": [
+			{
+				"order": 1,
+				"description": "step1"
+			}
+		],
+		"approved": true
+	}`
 	createReq, _ := http.NewRequest("POST", "/v1/recipes", strings.NewReader(postBody))
 	createReq.Header.Set("Content-Type", "application/json")
 	createResp := httptest.NewRecorder()
@@ -118,7 +134,23 @@ func TestIntegrationSaveRecipe(t *testing.T) {
 	// Initialize the router with the database and logger
 	router := routes.SetupRouter(database, logger)
 
-	reqBody := `{"title": "Integration Created Recipe", "ingredients": ["ing1"], "steps": ["step1"], "approved": true}`
+	reqBody := `{
+		"title": "Integration Created Recipe",
+		"ingredients": [
+			{
+				"name": "ingredient1",
+				"amount": "1",
+				"unit": "cup"
+			}
+		],
+		"steps": [
+			{
+				"order": 1,
+				"description": "step1"
+			}
+		],
+		"approved": true
+	}`
 	req, _ := http.NewRequest("POST", "/v1/recipes", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
