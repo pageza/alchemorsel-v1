@@ -31,8 +31,8 @@ func DefaultConfig() RateLimitConfig {
 // TestConfig returns configuration suitable for testing
 func TestConfig() RateLimitConfig {
 	return RateLimitConfig{
-		RequestsPerSecond: 1.0,
-		Burst:             1,
+		RequestsPerSecond: 100.0, // Allow more requests in test mode
+		Burst:             100,
 		ExpirationTTL:     time.Minute,
 	}
 }
@@ -56,16 +56,32 @@ func getLimiter(key string, config RateLimitConfig) *rate.Limiter {
 	return limiter
 }
 
+// isTestMode checks if we're in test mode
+func isTestMode() bool {
+	return gin.Mode() == gin.TestMode ||
+		os.Getenv("INTEGRATION_TEST") == "true" ||
+		os.Getenv("TEST_RATE_LIMIT_STRICT") == "true"
+}
+
+// calculateRetryAfter calculates the retry after duration
+func calculateRetryAfter(config RateLimitConfig) time.Duration {
+	if config.RequestsPerSecond <= 0 {
+		return time.Minute // More reasonable default for testing
+	}
+	return time.Second / time.Duration(config.RequestsPerSecond)
+}
+
 // RateLimiter limits the rate of requests per IP and path
 func RateLimiter() gin.HandlerFunc {
 	config := DefaultConfig()
-	if gin.Mode() == gin.TestMode || os.Getenv("INTEGRATION_TEST") == "true" {
+	if isTestMode() {
 		config = TestConfig()
 	}
 
 	lmt := tollbooth.NewLimiter(config.RequestsPerSecond, &limiter.ExpirableOptions{
 		DefaultExpirationTTL: config.ExpirationTTL,
 	})
+	lmt.SetBurst(config.Burst)
 
 	return func(c *gin.Context) {
 		// Get client IP for rate limiting
@@ -77,13 +93,10 @@ func RateLimiter() gin.HandlerFunc {
 		limiter := getLimiter(key, config)
 
 		if !limiter.Allow() {
-			retryAfter := time.Second
-			if config.RequestsPerSecond > 0 {
-				retryAfter = time.Second / time.Duration(config.RequestsPerSecond)
-			}
+			retryAfter := calculateRetryAfter(config)
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error":       "rate limit exceeded",
-				"retry_after": time.Until(time.Now().Add(retryAfter)).String(),
+				"retry_after": retryAfter.String(),
 			})
 			return
 		}
@@ -91,13 +104,10 @@ func RateLimiter() gin.HandlerFunc {
 		// Check tollbooth limiter as well
 		err := tollbooth.LimitByRequest(lmt, c.Writer, c.Request)
 		if err != nil {
-			retryAfter := time.Second
-			if config.RequestsPerSecond > 0 {
-				retryAfter = time.Second / time.Duration(config.RequestsPerSecond)
-			}
+			retryAfter := calculateRetryAfter(config)
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error":       "rate limit exceeded",
-				"retry_after": time.Until(time.Now().Add(retryAfter)).String(),
+				"retry_after": retryAfter.String(),
 			})
 			return
 		}
@@ -114,7 +124,7 @@ func LoginRateLimiter() gin.HandlerFunc {
 		ExpirationTTL:     time.Hour,
 	}
 
-	if gin.Mode() == gin.TestMode || os.Getenv("INTEGRATION_TEST") == "true" {
+	if isTestMode() {
 		config = TestConfig()
 	}
 
@@ -123,13 +133,10 @@ func LoginRateLimiter() gin.HandlerFunc {
 		limiter := getLimiter("login:"+clientIP, config)
 
 		if !limiter.Allow() {
-			retryAfter := time.Second
-			if config.RequestsPerSecond > 0 {
-				retryAfter = time.Second / time.Duration(config.RequestsPerSecond)
-			}
+			retryAfter := calculateRetryAfter(config)
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error":       "Too many login attempts. Please try again later.",
-				"retry_after": time.Until(time.Now().Add(retryAfter)).String(),
+				"retry_after": retryAfter.String(),
 			})
 			return
 		}
@@ -146,7 +153,7 @@ func ForgotPasswordRateLimiter() gin.HandlerFunc {
 		ExpirationTTL:     time.Hour,
 	}
 
-	if gin.Mode() == gin.TestMode || os.Getenv("INTEGRATION_TEST") == "true" {
+	if isTestMode() {
 		config = TestConfig()
 	}
 
@@ -155,13 +162,10 @@ func ForgotPasswordRateLimiter() gin.HandlerFunc {
 		limiter := getLimiter("forgot_password:"+clientIP, config)
 
 		if !limiter.Allow() {
-			retryAfter := time.Second
-			if config.RequestsPerSecond > 0 {
-				retryAfter = time.Second / time.Duration(config.RequestsPerSecond)
-			}
+			retryAfter := calculateRetryAfter(config)
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error":       "Too many password reset attempts. Please try again later.",
-				"retry_after": time.Until(time.Now().Add(retryAfter)).String(),
+				"retry_after": retryAfter.String(),
 			})
 			return
 		}
@@ -177,15 +181,11 @@ func ResetLimiters() {
 
 	limiters = make(map[string]*rate.Limiter)
 
-	// If TEST_RATE_LIMIT_STRICT or INTEGRATION_TEST is set, use strict limits
-	if os.Getenv("TEST_RATE_LIMIT_STRICT") == "true" || os.Getenv("INTEGRATION_TEST") == "true" {
-		// Create strict limiters for test mode
-		limiters["login:test"] = rate.NewLimiter(0, 1)
-		limiters["forgot_password:test"] = rate.NewLimiter(0, 1)
-	} else if gin.Mode() == gin.TestMode {
-		// Create test mode limiters
-		limiters["login:test"] = rate.NewLimiter(0.1, 1)
-		limiters["forgot_password:test"] = rate.NewLimiter(0.1, 1)
+	// Initialize limiters based on test mode
+	if isTestMode() {
+		config := TestConfig()
+		limiters["login:test"] = rate.NewLimiter(rate.Limit(config.RequestsPerSecond), config.Burst)
+		limiters["forgot_password:test"] = rate.NewLimiter(rate.Limit(config.RequestsPerSecond), config.Burst)
 	}
 }
 

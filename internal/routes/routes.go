@@ -71,11 +71,6 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
 		router.Use(middleware.SecurityHeaders())
 	}
 
-	// Only add the rate limiter if DISABLE_RATE_LIMITER is not set to "true".
-	if os.Getenv("DISABLE_RATE_LIMITER") != "true" {
-		router.Use(middleware.RateLimiter())
-	}
-
 	logger.Info("Setting up routes...")
 	// Grouping versioned API routes
 	v1 := router.Group("/v1")
@@ -100,6 +95,22 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
 		userHandler := handlers.NewUserHandler(userService)
 		recipeHandler := handlers.NewRecipeHandler(recipeService)
 
+		// Only add the rate limiter if DISABLE_RATE_LIMITER is not set to "true".
+		if os.Getenv("DISABLE_RATE_LIMITER") != "true" {
+			// Create a group for endpoints that should not have the global rate limiter
+			noRateLimit := router.Group("")
+			noRateLimit.Use(middleware.RateLimiter())
+			{
+				// Add all routes except login to the rate-limited group
+				noRateLimit.GET("/v1/health", handlers.HealthCheck)
+				noRateLimit.POST("/v1/users", userHandler.CreateUser)
+				noRateLimit.GET("/v1/users/verify-email/:token", userHandler.VerifyEmail)
+				noRateLimit.POST("/v1/users/forgot-password", userHandler.ForgotPassword)
+				noRateLimit.POST("/v1/users/reset-password", userHandler.ResetPassword)
+				noRateLimit.GET("/v1/users/:id", userHandler.GetUser)
+			}
+		}
+
 		// Public user endpoints for registration, login and account management
 		v1.POST("/users", userHandler.CreateUser)
 		v1.POST("/users/login", middleware.LoginRateLimiter(), userHandler.LoginUser)
@@ -108,29 +119,28 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
 		v1.POST("/users/reset-password", userHandler.ResetPassword)
 		v1.GET("/users/:id", userHandler.GetUser)
 
-		// Recipe endpoints
-		v1.GET("/recipes", recipeHandler.ListRecipes)
-		v1.GET("/recipes/:id", recipeHandler.GetRecipe)
-		v1.POST("/recipes", recipeHandler.SaveRecipe)
-		v1.PUT("/recipes/:id", recipeHandler.UpdateRecipe)
-		v1.DELETE("/recipes/:id", recipeHandler.DeleteRecipe)
-
-		// Recipe resolution endpoint
-		v1.POST("/recipes/resolve", recipeHandler.ResolveRecipe)
-
 		// Group for endpoints that require authentication.
 		secured := v1.Group("")
 		secured.Use(middleware.AuthMiddleware())
 		{
+			// User endpoints
 			secured.GET("/users/me", userHandler.GetCurrentUser)
 			secured.PUT("/users/me", userHandler.UpdateCurrentUser)
 			secured.PATCH("/users/me", userHandler.PatchCurrentUser)
 			secured.DELETE("/users/me", userHandler.DeleteCurrentUser)
 			secured.GET("/admin/users", userHandler.GetAllUsers)
-		}
 
-		// Health-check endpoint to support TestHealthCheck.
-		v1.GET("/health", handlers.HealthCheck)
+			// Recipe endpoints
+			secured.GET("/recipes", recipeHandler.ListRecipes)
+			secured.GET("/recipes/:id", recipeHandler.GetRecipe)
+			secured.POST("/recipes", recipeHandler.SaveRecipe)
+			secured.PUT("/recipes/:id", recipeHandler.UpdateRecipe)
+			secured.DELETE("/recipes/:id", recipeHandler.DeleteRecipe)
+			secured.POST("/recipes/resolve", recipeHandler.ResolveRecipe)
+			secured.POST("/recipes/:id/rate", recipeHandler.RateRecipe)
+			secured.GET("/recipes/:id/ratings", recipeHandler.GetRecipeRatings)
+			secured.GET("/recipes/search", recipeHandler.SearchRecipes)
+		}
 	}
 
 	logger.Info("Router setup complete")

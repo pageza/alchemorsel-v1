@@ -11,18 +11,38 @@ import (
 	"go.uber.org/zap"
 )
 
-// RecipeServiceInterface defines the methods for recipe-related business logic.
-type RecipeServiceInterface interface {
-	GetRecipe(ctx context.Context, id string) (*models.Recipe, error)
+// RecipeService defines the interface for recipe-related operations
+type RecipeService interface {
+	// SaveRecipe creates a new recipe
 	SaveRecipe(ctx context.Context, recipe *models.Recipe) error
-	ListRecipes(ctx context.Context) ([]*models.Recipe, error)
+
+	// GetRecipe retrieves a recipe by ID
+	GetRecipe(ctx context.Context, id string) (*models.Recipe, error)
+
+	// UpdateRecipe updates an existing recipe
 	UpdateRecipe(ctx context.Context, recipe *models.Recipe) error
+
+	// DeleteRecipe deletes a recipe by ID
 	DeleteRecipe(ctx context.Context, id string) error
-	ResolveRecipe(query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error)
+
+	// ListRecipes retrieves a list of recipes with pagination and sorting
+	ListRecipes(ctx context.Context, page, limit int, sort, order string) ([]models.Recipe, error)
+
+	// SearchRecipes searches for recipes based on query parameters
+	SearchRecipes(ctx context.Context, query string, tags []string, difficulty string) ([]models.Recipe, error)
+
+	// RateRecipe adds a rating to a recipe
+	RateRecipe(ctx context.Context, recipeID string, rating float64) error
+
+	// GetRecipeRatings retrieves all ratings for a recipe
+	GetRecipeRatings(ctx context.Context, recipeID string) ([]float64, error)
+
+	// ResolveRecipe resolves a recipe query with attributes
+	ResolveRecipe(ctx context.Context, query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error)
 }
 
-// RecipeService is the implementation of RecipeServiceInterface.
-type RecipeService struct {
+// recipeService is the implementation of RecipeService
+type recipeService struct {
 	repo             repositories.RecipeRepository
 	cuisineService   CuisineService
 	dietService      DietService
@@ -36,8 +56,8 @@ func NewRecipeService(
 	dietService DietService,
 	applianceService ApplianceService,
 	tagService TagService,
-) RecipeServiceInterface {
-	return &RecipeService{
+) RecipeService {
+	return &recipeService{
 		repo:             repo,
 		cuisineService:   cuisineService,
 		dietService:      dietService,
@@ -46,11 +66,11 @@ func NewRecipeService(
 	}
 }
 
-func (s *RecipeService) GetRecipe(ctx context.Context, id string) (*models.Recipe, error) {
+func (s *recipeService) GetRecipe(ctx context.Context, id string) (*models.Recipe, error) {
 	return s.repo.GetRecipe(ctx, id)
 }
 
-func (s *RecipeService) SaveRecipe(ctx context.Context, recipe *models.Recipe) error {
+func (s *recipeService) SaveRecipe(ctx context.Context, recipe *models.Recipe) error {
 	if recipe == nil {
 		return errors.New("recipe cannot be nil")
 	}
@@ -140,11 +160,11 @@ func (s *RecipeService) SaveRecipe(ctx context.Context, recipe *models.Recipe) e
 	return s.repo.SaveRecipe(ctx, recipe)
 }
 
-func (s *RecipeService) ListRecipes(ctx context.Context) ([]*models.Recipe, error) {
-	return s.repo.ListRecipes(ctx)
+func (s *recipeService) ListRecipes(ctx context.Context, page, limit int, sort, order string) ([]models.Recipe, error) {
+	return s.repo.ListRecipes(ctx, page, limit, sort, order)
 }
 
-func (s *RecipeService) UpdateRecipe(ctx context.Context, recipe *models.Recipe) error {
+func (s *recipeService) UpdateRecipe(ctx context.Context, recipe *models.Recipe) error {
 	if recipe == nil {
 		return errors.New("recipe cannot be nil")
 	}
@@ -223,10 +243,22 @@ func (s *RecipeService) UpdateRecipe(ctx context.Context, recipe *models.Recipe)
 	return s.repo.UpdateRecipe(ctx, recipe)
 }
 
-func (s *RecipeService) DeleteRecipe(ctx context.Context, id string) error {
+func (s *recipeService) DeleteRecipe(ctx context.Context, id string) error {
 	return s.repo.DeleteRecipe(ctx, id)
 }
 
-func (s *RecipeService) ResolveRecipe(query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error) {
-	return ResolveRecipe(query, attributes)
+func (s *recipeService) SearchRecipes(ctx context.Context, query string, tags []string, difficulty string) ([]models.Recipe, error) {
+	return s.repo.SearchRecipes(ctx, query, tags, difficulty)
+}
+
+func (s *recipeService) RateRecipe(ctx context.Context, recipeID string, rating float64) error {
+	return s.repo.RateRecipe(ctx, recipeID, rating)
+}
+
+func (s *recipeService) GetRecipeRatings(ctx context.Context, recipeID string) ([]float64, error) {
+	return s.repo.GetRecipeRatings(ctx, recipeID)
+}
+
+func (s *recipeService) ResolveRecipe(ctx context.Context, query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error) {
+	return s.repo.ResolveRecipe(ctx, query, attributes)
 }

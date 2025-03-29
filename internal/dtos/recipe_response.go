@@ -4,18 +4,18 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 )
 
 // RecipeResponse defines the payload structure for returning a recipe.
 type RecipeResponse struct {
-	ID                string   `json:"id"`
-	Title             string   `json:"title"`
-	Ingredients       []string `json:"ingredients"`
-	Steps             []string `json:"steps"`
-	NutritionalInfo   string   `json:"nutritional_info,omitempty"`
-	AllergyDisclaimer string   `json:"allergy_disclaimer,omitempty"`
+	ID                string       `json:"id"`
+	Title             string       `json:"title"`
+	Description       string       `json:"description,omitempty"`
+	Ingredients       []Ingredient `json:"ingredients"`
+	Steps             []Step       `json:"steps"`
+	NutritionalInfo   string       `json:"nutritional_info,omitempty"`
+	AllergyDisclaimer string       `json:"allergy_disclaimer,omitempty"`
 	// Many-to-many relationships converted to slice of names.
 	Cuisines   []string `json:"cuisines,omitempty"`
 	Diets      []string `json:"diets,omitempty"`
@@ -23,70 +23,72 @@ type RecipeResponse struct {
 	Tags       []string `json:"tags,omitempty"`
 	// Additional fields for future enhancements.
 	Images        []string  `json:"images,omitempty"`
-	AverageRating float64   `json:"average_rating"`
-	RatingCount   int       `json:"rating_count"`
 	Difficulty    string    `json:"difficulty,omitempty"`
-	PrepTime      int       `json:"prep_time"`
-	CookTime      int       `json:"cook_time"`
+	PrepTime      int       `json:"prep_time,omitempty"`
+	CookTime      int       `json:"cooking_time,omitempty"`
+	Servings      int       `json:"servings,omitempty"`
+	AverageRating float64   `json:"average_rating,omitempty"`
+	RatingCount   int       `json:"rating_count,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+	Approved      bool      `json:"approved,omitempty"`
+}
+
+// RecipeListResponse wraps a list of recipes in a response object
+type RecipeListResponse struct {
+	Recipes []RecipeResponse `json:"recipes"`
 }
 
 // NewRecipeResponse converts a models.Recipe into a RecipeResponse DTO.
 // It unmarshals JSON fields and maps related models into slices of names.
-func NewRecipeResponse(r *models.Recipe) RecipeResponse {
-	// Fallback: if the recipe ID is empty, assign a new UUID.
-	if r.ID == "" {
-		r.ID = uuid.NewString()
+func NewRecipeResponse(recipe *models.Recipe) *RecipeResponse {
+	response := &RecipeResponse{
+		ID:                recipe.ID,
+		Title:             recipe.Title,
+		Description:       recipe.Description,
+		NutritionalInfo:   recipe.NutritionalInfo,
+		AllergyDisclaimer: recipe.AllergyDisclaimer,
+		Difficulty:        recipe.Difficulty,
+		PrepTime:          recipe.PrepTime,
+		CookTime:          recipe.CookTime,
+		Servings:          recipe.Servings,
+		Approved:          recipe.Approved,
+		CreatedAt:         recipe.CreatedAt,
+		UpdatedAt:         recipe.UpdatedAt,
 	}
 
-	var ingredients []string
-	_ = json.Unmarshal(r.Ingredients, &ingredients)
-
-	var steps []string
-	_ = json.Unmarshal(r.Steps, &steps)
-
-	var images []string
-	_ = json.Unmarshal(r.Images, &images)
-
-	var cuisines []string
-	for _, c := range r.Cuisines {
-		cuisines = append(cuisines, c.Name)
+	// Convert ingredients JSON to array
+	var ingredients []Ingredient
+	if err := json.Unmarshal(recipe.Ingredients, &ingredients); err == nil {
+		response.Ingredients = ingredients
 	}
 
-	var diets []string
-	for _, d := range r.Diets {
-		diets = append(diets, d.Name)
+	// Convert steps JSON to array
+	var steps []Step
+	if err := json.Unmarshal(recipe.Steps, &steps); err == nil {
+		response.Steps = steps
 	}
 
-	var appliances []string
-	for _, a := range r.Appliances {
-		appliances = append(appliances, a.Name)
+	// Map related models to slices of names
+	response.Cuisines = make([]string, len(recipe.Cuisines))
+	for i, cuisine := range recipe.Cuisines {
+		response.Cuisines[i] = cuisine.Name
 	}
 
-	var tags []string
-	for _, t := range r.Tags {
-		tags = append(tags, t.Name)
+	response.Diets = make([]string, len(recipe.Diets))
+	for i, diet := range recipe.Diets {
+		response.Diets[i] = diet.Name
 	}
 
-	return RecipeResponse{
-		ID:                r.ID,
-		Title:             r.Title,
-		Ingredients:       ingredients,
-		Steps:             steps,
-		NutritionalInfo:   r.NutritionalInfo,
-		AllergyDisclaimer: r.AllergyDisclaimer,
-		Cuisines:          cuisines,
-		Diets:             diets,
-		Appliances:        appliances,
-		Tags:              tags,
-		Images:            images,
-		AverageRating:     r.AverageRating,
-		RatingCount:       r.RatingCount,
-		Difficulty:        r.Difficulty,
-		PrepTime:          r.PrepTime,
-		CookTime:          r.CookTime,
-		CreatedAt:         r.CreatedAt,
-		UpdatedAt:         r.UpdatedAt,
+	response.Appliances = make([]string, len(recipe.Appliances))
+	for i, appliance := range recipe.Appliances {
+		response.Appliances[i] = appliance.Name
 	}
+
+	response.Tags = make([]string, len(recipe.Tags))
+	for i, tag := range recipe.Tags {
+		response.Tags[i] = tag.Name
+	}
+
+	return response
 }

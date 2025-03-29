@@ -107,11 +107,15 @@ func (m *MockTagService) GetOrCreate(ctx context.Context, name string) (*models.
 
 // MockRecipeRepository is a mock implementation of RecipeRepository for testing.
 type MockRecipeRepository struct {
-	GetRecipeFunc    func(ctx context.Context, id string) (*models.Recipe, error)
-	SaveRecipeFunc   func(ctx context.Context, recipe *models.Recipe) error
-	ListRecipesFunc  func(ctx context.Context) ([]*models.Recipe, error)
-	UpdateRecipeFunc func(ctx context.Context, recipe *models.Recipe) error
-	DeleteRecipeFunc func(ctx context.Context, id string) error
+	GetRecipeFunc        func(ctx context.Context, id string) (*models.Recipe, error)
+	SaveRecipeFunc       func(ctx context.Context, recipe *models.Recipe) error
+	ListRecipesFunc      func(ctx context.Context, page, limit int, sort, order string) ([]models.Recipe, error)
+	UpdateRecipeFunc     func(ctx context.Context, recipe *models.Recipe) error
+	DeleteRecipeFunc     func(ctx context.Context, id string) error
+	SearchRecipesFunc    func(ctx context.Context, query string, tags []string, difficulty string) ([]models.Recipe, error)
+	RateRecipeFunc       func(ctx context.Context, recipeID string, rating float64) error
+	GetRecipeRatingsFunc func(ctx context.Context, recipeID string) ([]float64, error)
+	ResolveRecipeFunc    func(ctx context.Context, query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error)
 }
 
 func (m *MockRecipeRepository) GetRecipe(ctx context.Context, id string) (*models.Recipe, error) {
@@ -128,9 +132,9 @@ func (m *MockRecipeRepository) SaveRecipe(ctx context.Context, recipe *models.Re
 	return nil
 }
 
-func (m *MockRecipeRepository) ListRecipes(ctx context.Context) ([]*models.Recipe, error) {
+func (m *MockRecipeRepository) ListRecipes(ctx context.Context, page, limit int, sort, order string) ([]models.Recipe, error) {
 	if m.ListRecipesFunc != nil {
-		return m.ListRecipesFunc(ctx)
+		return m.ListRecipesFunc(ctx, page, limit, sort, order)
 	}
 	return nil, nil
 }
@@ -147,6 +151,34 @@ func (m *MockRecipeRepository) DeleteRecipe(ctx context.Context, id string) erro
 		return m.DeleteRecipeFunc(ctx, id)
 	}
 	return nil
+}
+
+func (m *MockRecipeRepository) SearchRecipes(ctx context.Context, query string, tags []string, difficulty string) ([]models.Recipe, error) {
+	if m.SearchRecipesFunc != nil {
+		return m.SearchRecipesFunc(ctx, query, tags, difficulty)
+	}
+	return nil, nil
+}
+
+func (m *MockRecipeRepository) RateRecipe(ctx context.Context, recipeID string, rating float64) error {
+	if m.RateRecipeFunc != nil {
+		return m.RateRecipeFunc(ctx, recipeID, rating)
+	}
+	return nil
+}
+
+func (m *MockRecipeRepository) GetRecipeRatings(ctx context.Context, recipeID string) ([]float64, error) {
+	if m.GetRecipeRatingsFunc != nil {
+		return m.GetRecipeRatingsFunc(ctx, recipeID)
+	}
+	return nil, nil
+}
+
+func (m *MockRecipeRepository) ResolveRecipe(ctx context.Context, query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error) {
+	if m.ResolveRecipeFunc != nil {
+		return m.ResolveRecipeFunc(ctx, query, attributes)
+	}
+	return nil, nil, nil
 }
 
 func TestSaveRecipeSuccess(t *testing.T) {
@@ -312,13 +344,19 @@ func TestGetRecipe(t *testing.T) {
 }
 
 func TestListRecipes(t *testing.T) {
-	mockRecipes := []*models.Recipe{
-		{ID: "1", Title: "Recipe 1"},
-		{ID: "2", Title: "Recipe 2"},
+	mockRecipes := []models.Recipe{
+		{
+			ID:    "1",
+			Title: "Test Recipe 1",
+		},
+		{
+			ID:    "2",
+			Title: "Test Recipe 2",
+		},
 	}
 
 	mockRepo := &MockRecipeRepository{
-		ListRecipesFunc: func(ctx context.Context) ([]*models.Recipe, error) {
+		ListRecipesFunc: func(ctx context.Context, page, limit int, sort, order string) ([]models.Recipe, error) {
 			return mockRecipes, nil
 		},
 	}
@@ -330,14 +368,14 @@ func TestListRecipes(t *testing.T) {
 
 	service := services.NewRecipeService(mockRepo, mockCuisineService, mockDietService, mockApplianceService, mockTagService)
 
-	recipes, err := service.ListRecipes(context.Background())
+	recipes, err := service.ListRecipes(context.Background(), 1, 10, "created_at", "desc")
 	assert.NoError(t, err)
 	assert.Equal(t, mockRecipes, recipes)
 }
 
 func TestListRecipesError(t *testing.T) {
 	mockRepo := &MockRecipeRepository{
-		ListRecipesFunc: func(ctx context.Context) ([]*models.Recipe, error) {
+		ListRecipesFunc: func(ctx context.Context, page, limit int, sort, order string) ([]models.Recipe, error) {
 			return nil, assert.AnError
 		},
 	}
@@ -349,7 +387,7 @@ func TestListRecipesError(t *testing.T) {
 
 	service := services.NewRecipeService(mockRepo, mockCuisineService, mockDietService, mockApplianceService, mockTagService)
 
-	recipes, err := service.ListRecipes(context.Background())
+	recipes, err := service.ListRecipes(context.Background(), 1, 10, "created_at", "desc")
 	assert.Error(t, err)
 	assert.Nil(t, recipes)
 }

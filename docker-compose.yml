@@ -1,4 +1,3 @@
-
 services:
   app:
     build: .
@@ -32,6 +31,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       DB_DRIVER: postgres
       DB_SOURCE: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      INTEGRATION_TEST: "true"
     profiles:
       - development
       - production

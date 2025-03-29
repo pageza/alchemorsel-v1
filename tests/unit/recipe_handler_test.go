@@ -38,12 +38,12 @@ func (m *MockRecipeService) SaveRecipe(ctx context.Context, recipe *models.Recip
 	return args.Error(0)
 }
 
-func (m *MockRecipeService) ListRecipes(ctx context.Context) ([]*models.Recipe, error) {
-	args := m.Called(ctx)
+func (m *MockRecipeService) ListRecipes(ctx context.Context, page, limit int, sort, order string) ([]models.Recipe, error) {
+	args := m.Called(ctx, page, limit, sort, order)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*models.Recipe), args.Error(1)
+	return args.Get(0).([]models.Recipe), args.Error(1)
 }
 
 func (m *MockRecipeService) UpdateRecipe(ctx context.Context, recipe *models.Recipe) error {
@@ -56,12 +56,33 @@ func (m *MockRecipeService) DeleteRecipe(ctx context.Context, id string) error {
 	return args.Error(0)
 }
 
-func (m *MockRecipeService) ResolveRecipe(query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error) {
-	args := m.Called(query, attributes)
+func (m *MockRecipeService) ResolveRecipe(ctx context.Context, query string, attributes map[string]interface{}) (*models.Recipe, []*models.Recipe, error) {
+	args := m.Called(ctx, query, attributes)
 	if args.Get(0) == nil {
 		return nil, nil, args.Error(2)
 	}
 	return args.Get(0).(*models.Recipe), args.Get(1).([]*models.Recipe), args.Error(2)
+}
+
+func (m *MockRecipeService) SearchRecipes(ctx context.Context, query string, tags []string, difficulty string) ([]models.Recipe, error) {
+	args := m.Called(ctx, query, tags, difficulty)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.Recipe), args.Error(1)
+}
+
+func (m *MockRecipeService) RateRecipe(ctx context.Context, recipeID string, rating float64) error {
+	args := m.Called(ctx, recipeID, rating)
+	return args.Error(0)
+}
+
+func (m *MockRecipeService) GetRecipeRatings(ctx context.Context, recipeID string) ([]float64, error) {
+	args := m.Called(ctx, recipeID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]float64), args.Error(1)
 }
 
 // End: New mock implementation
