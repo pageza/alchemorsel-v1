@@ -4,8 +4,8 @@ FROM postman/newman:latest
 WORKDIR /etc/newman
 
 # Copy collections and environment files
-COPY collections/ ./collections/
-COPY environments/ ./environments/
+COPY e2e/collections/ ./collections/
+COPY e2e/environments/ ./environments/
 
 # Set default command to run all collections
 CMD ["run", "collections/recipes/recipe_endpoints.postman_collection.json", "collections/users/user_endpoints.postman_collection.json", "collections/auth/auth_endpoints.postman_collection.json", "collections/admin/admin_endpoints.postman_collection.json", "collections/health/health_endpoints.postman_collection.json", "--environment=environments/local.postman_environment.json"] 
