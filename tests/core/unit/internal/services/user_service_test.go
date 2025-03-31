@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -71,13 +70,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	// Create a temporary file for the DSN
-	dsnFile := filepath.Join(tmpDir, "testdb.dsn")
 	dsn := fmt.Sprintf("host=%s port=%s user=postgres password=testpass dbname=testdb sslmode=disable options='-c search_path=public,pg_catalog'", host, mappedPort.Port())
-	if err := os.WriteFile(dsnFile, []byte(dsn), 0644); err != nil {
-		fmt.Printf("Failed to write DSN file: %v\n", err)
-		os.Exit(1)
-	}
 
 	db.DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
