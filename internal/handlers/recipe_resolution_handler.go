@@ -12,7 +12,10 @@ import (
 func ResolveRecipe(c *gin.Context) {
 	var resolutionReq dtos.RecipeResolutionRequest
 	if err := c.ShouldBindJSON(&resolutionReq); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: err.Error(),
+		})
 		return
 	}
 
@@ -28,7 +31,10 @@ func ResolveRecipe(c *gin.Context) {
 
 	candidate, alternatives, err := services.ResolveRecipe(resolutionReq.Title, attributes)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: err.Error(),
+		})
 		return
 	}
 

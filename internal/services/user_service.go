@@ -8,6 +8,7 @@ import (
 
 	"encoding/hex"
 
+	"github.com/google/uuid"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"golang.org/x/crypto/bcrypt"
@@ -80,6 +81,11 @@ func (s *UserService) CreateUser(ctx context.Context, user *models.User) error {
 	}
 	if existingUser != nil {
 		return fmt.Errorf("user with email %s already exists", user.Email)
+	}
+
+	// Assign a UUID if not provided
+	if user.ID == "" {
+		user.ID = uuid.New().String()
 	}
 
 	// Hash password

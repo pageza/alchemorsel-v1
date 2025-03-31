@@ -8,21 +8,21 @@ import (
 
 // User represents a user of the application.
 type User struct {
-	ID                       string         `json:"id" gorm:"type:uuid;primaryKey"`
+	ID                       string         `json:"id,omitempty" gorm:"type:uuid;primaryKey"`
 	Name                     string         `json:"name" binding:"required"`
 	Email                    string         `json:"email" binding:"required,email" gorm:"uniqueIndex:users_email_key"`
-	Password                 string         `json:"password" binding:"required"`
-	IsAdmin                  bool           `json:"is_admin" gorm:"default:false"`
-	EmailVerified            bool           `json:"email_verified" gorm:"default:false"`
-	EmailVerificationToken   string         `json:"email_verification_token" gorm:"index"`
-	EmailVerificationExpires *time.Time     `json:"email_verification_expires"`
-	ResetPasswordToken       string         `json:"reset_password_token" gorm:"index"`
-	ResetPasswordExpires     *time.Time     `json:"reset_password_expires"`
-	LastLoginAt              *time.Time     `json:"last_login_at"`
-	LastActiveAt             *time.Time     `json:"last_active_at"`
-	DeletedAt                gorm.DeletedAt `json:"deleted_at" gorm:"index"`
-	CreatedAt                time.Time      `json:"created_at"`
-	UpdatedAt                time.Time      `json:"updated_at"`
+	Password                 string         `json:"password" binding:"required" gorm:"column:password_hash"`
+	IsAdmin                  bool           `json:"is_admin,omitempty" gorm:"default:false"`
+	EmailVerified            bool           `json:"email_verified,omitempty" gorm:"default:false"`
+	EmailVerificationToken   string         `json:"email_verification_token,omitempty" gorm:"index"`
+	EmailVerificationExpires *time.Time     `json:"email_verification_expires,omitempty"`
+	ResetPasswordToken       string         `json:"reset_password_token,omitempty" gorm:"index"`
+	ResetPasswordExpires     *time.Time     `json:"reset_password_expires,omitempty"`
+	LastLoginAt              *time.Time     `json:"last_login_at,omitempty"`
+	LastActiveAt             *time.Time     `json:"last_active_at,omitempty"`
+	DeletedAt                gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
+	CreatedAt                time.Time      `json:"created_at,omitempty"`
+	UpdatedAt                time.Time      `json:"updated_at,omitempty"`
 }
 
 // LoginRequest represents the JSON payload for user login.

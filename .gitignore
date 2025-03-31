@@ -30,4 +30,6 @@ test.db
 
 # Docker secrets
 secrets/*.txt
-!secrets/*.txt.example 
+!secrets/*.txt.example
+
+tests/.testdata/* 

@@ -68,7 +68,8 @@ func calculateRetryAfter(config RateLimitConfig) time.Duration {
 	if config.RequestsPerSecond <= 0 {
 		return time.Minute // More reasonable default for testing
 	}
-	return time.Second / time.Duration(config.RequestsPerSecond)
+	// Use float division to handle rates less than 1
+	return time.Duration(float64(time.Second) / config.RequestsPerSecond)
 }
 
 // RateLimiter limits the rate of requests per IP and path
@@ -129,6 +130,10 @@ func LoginRateLimiter() gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
+		if os.Getenv("DISABLE_RATE_LIMITER") == "true" {
+			c.Next()
+			return
+		}
 		clientIP := c.ClientIP()
 		limiter := getLimiter("login:"+clientIP, config)
 

@@ -109,7 +109,7 @@ func NewLogger(config LogConfig) (*Logger, error) {
 		consoleCore := zapcore.NewCore(
 			encoder,
 			zapcore.AddSync(os.Stdout),
-			zap.NewAtomicLevelAt(getLogLevel(config.LogLevel)),
+			zap.NewAtomicLevelAt(zapcore.DebugLevel),
 		)
 		cores = append(cores, consoleCore)
 	}
@@ -119,7 +119,7 @@ func NewLogger(config LogConfig) (*Logger, error) {
 		fileCore := zapcore.NewCore(
 			encoder,
 			zapcore.AddSync(l.rotator),
-			zap.NewAtomicLevelAt(getLogLevel(config.LogLevel)),
+			zap.NewAtomicLevelAt(zapcore.DebugLevel),
 		)
 		cores = append(cores, fileCore)
 	}

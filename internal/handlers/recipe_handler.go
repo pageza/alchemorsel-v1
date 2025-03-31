@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/dtos"
@@ -38,7 +40,7 @@ func (h *RecipeHandler) ListRecipes(c *gin.Context) {
 
 	recipes, err := h.Service.ListRecipes(c.Request.Context(), page, limit, sort, order)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: err.Error()})
 		return
 	}
 
@@ -67,7 +69,7 @@ func (h *RecipeHandler) GetRecipe(c *gin.Context) {
 	id := c.Param("id")
 	recipe, err := h.Service.GetRecipe(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Recipe not found"})
+		c.JSON(http.StatusNotFound, dtos.ErrorResponse{Code: "NOT_FOUND", Message: "Recipe not found"})
 		return
 	}
 	response := dtos.NewRecipeResponse(recipe)
@@ -88,24 +90,43 @@ func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 	var recipeReq dtos.RecipeRequest
 	if err := c.ShouldBindJSON(&recipeReq); err != nil {
 		logrus.WithError(err).Error("Failed to bind JSON request")
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Invalid request body: " + err.Error()})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Invalid request body: " + err.Error()})
 		return
 	}
 
-	// Validate required fields
+	// Collect validation errors
+	var validationErrors []string
 	if recipeReq.Title == "" {
-		logrus.Error("Title is required")
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Title is required"})
-		return
+		validationErrors = append(validationErrors, "Title is required")
 	}
 	if len(recipeReq.Ingredients) == 0 {
-		logrus.Error("At least one ingredient is required")
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "At least one ingredient is required"})
-		return
+		validationErrors = append(validationErrors, "At least one ingredient is required")
 	}
 	if len(recipeReq.Steps) == 0 {
-		logrus.Error("At least one step is required")
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "At least one step is required"})
+		validationErrors = append(validationErrors, "At least one step is required")
+	}
+
+	// Validate ingredients
+	for i, ing := range recipeReq.Ingredients {
+		if ing.Name == "" || ing.Amount == "" || ing.Unit == "" {
+			validationErrors = append(validationErrors, fmt.Sprintf("Invalid ingredient at index %d: name, amount, and unit are required", i))
+		}
+	}
+
+	// Validate steps
+	for i, step := range recipeReq.Steps {
+		if step.Description == "" {
+			validationErrors = append(validationErrors, fmt.Sprintf("Invalid step at index %d: description is required", i))
+		}
+	}
+
+	// If there are validation errors, return them all at once
+	if len(validationErrors) > 0 {
+		logrus.WithField("errors", validationErrors).Error("Validation failed")
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: strings.Join(validationErrors, "; "),
+		})
 		return
 	}
 
@@ -122,17 +143,9 @@ func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 		Approved:          recipeReq.Approved,
 	}
 
-	// Convert and validate ingredients
+	// Convert ingredients
 	ingredients := make([]models.Ingredient, len(recipeReq.Ingredients))
 	for i, ing := range recipeReq.Ingredients {
-		if ing.Name == "" || ing.Amount == "" || ing.Unit == "" {
-			logrus.WithFields(logrus.Fields{
-				"index":      i,
-				"ingredient": ing,
-			}).Error("Invalid ingredient")
-			c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Invalid ingredient: name, amount, and unit are required"})
-			return
-		}
 		ingredients[i] = models.Ingredient{
 			Name:   ing.Name,
 			Amount: ing.Amount,
@@ -141,21 +154,13 @@ func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 	}
 	if err := recipe.SetIngredients(ingredients); err != nil {
 		logrus.WithError(err).Error("Failed to set ingredients")
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Failed to set ingredients: " + err.Error()})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Failed to set ingredients: " + err.Error()})
 		return
 	}
 
-	// Convert and validate steps
+	// Convert steps
 	steps := make([]models.Step, len(recipeReq.Steps))
 	for i, step := range recipeReq.Steps {
-		if step.Description == "" {
-			logrus.WithFields(logrus.Fields{
-				"index": i,
-				"step":  step,
-			}).Error("Invalid step")
-			c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Invalid step: description is required"})
-			return
-		}
 		steps[i] = models.Step{
 			Order:       step.Order,
 			Description: step.Description,
@@ -163,7 +168,7 @@ func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 	}
 	if err := recipe.SetSteps(steps); err != nil {
 		logrus.WithError(err).Error("Failed to set steps")
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Failed to set steps: " + err.Error()})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Failed to set steps: " + err.Error()})
 		return
 	}
 
@@ -184,7 +189,7 @@ func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 	// Save recipe
 	if err := h.Service.SaveRecipe(c.Request.Context(), recipe); err != nil {
 		logrus.WithError(err).Error("Failed to save recipe")
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Error: "Failed to save recipe: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to save recipe: " + err.Error()})
 		return
 	}
 
@@ -208,13 +213,13 @@ func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
 func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Recipe ID is required"})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Recipe ID is required"})
 		return
 	}
 
 	var recipeReq dtos.RecipeRequest
 	if err := c.ShouldBindJSON(&recipeReq); err != nil {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: err.Error()})
 		return
 	}
 
@@ -222,10 +227,10 @@ func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
 	recipe, err := h.Service.GetRecipe(c.Request.Context(), id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Error: "Recipe not found"})
+			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Code: "NOT_FOUND", Message: "Recipe not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: err.Error()})
 		return
 	}
 
@@ -244,7 +249,7 @@ func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
 	ingredients := make([]models.Ingredient, len(recipeReq.Ingredients))
 	for i, ing := range recipeReq.Ingredients {
 		if ing.Name == "" || ing.Amount == "" || ing.Unit == "" {
-			c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Invalid ingredient: name, amount, and unit are required"})
+			c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Invalid ingredient: name, amount, and unit are required"})
 			return
 		}
 		ingredients[i] = models.Ingredient{
@@ -254,7 +259,7 @@ func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
 		}
 	}
 	if err := recipe.SetIngredients(ingredients); err != nil {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Failed to set ingredients: " + err.Error()})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Failed to set ingredients: " + err.Error()})
 		return
 	}
 
@@ -262,7 +267,7 @@ func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
 	steps := make([]models.Step, len(recipeReq.Steps))
 	for i, step := range recipeReq.Steps {
 		if step.Description == "" {
-			c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Invalid step: description is required"})
+			c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Invalid step: description is required"})
 			return
 		}
 		steps[i] = models.Step{
@@ -271,7 +276,7 @@ func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
 		}
 	}
 	if err := recipe.SetSteps(steps); err != nil {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Failed to set steps: " + err.Error()})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Failed to set steps: " + err.Error()})
 		return
 	}
 
@@ -297,10 +302,10 @@ func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
 	// Update recipe
 	if err := h.Service.UpdateRecipe(c.Request.Context(), recipe); err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Error: "Recipe not found"})
+			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Code: "NOT_FOUND", Message: "Recipe not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: err.Error()})
 		return
 	}
 
@@ -322,7 +327,11 @@ func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
 func (h *RecipeHandler) DeleteRecipe(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.Service.DeleteRecipe(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Code: "NOT_FOUND", Message: "Recipe not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to delete recipe: " + err.Error()})
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -341,13 +350,13 @@ func (h *RecipeHandler) DeleteRecipe(c *gin.Context) {
 func (h *RecipeHandler) ResolveRecipe(c *gin.Context) {
 	var req ResolveRecipeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: err.Error()})
 		return
 	}
 
 	resolved, similar, err := h.Service.ResolveRecipe(c.Request.Context(), req.Query, req.Attributes)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to resolve recipe: " + err.Error()})
 		return
 	}
 
@@ -373,34 +382,34 @@ func (h *RecipeHandler) ResolveRecipe(c *gin.Context) {
 func (h *RecipeHandler) RateRecipe(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Recipe ID is required"})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Recipe ID is required"})
 		return
 	}
 
 	var rating float64
 	if err := c.ShouldBindJSON(&rating); err != nil {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Invalid rating value"})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Invalid rating value"})
 		return
 	}
 
 	if rating < 0 || rating > 5 {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Rating must be between 0 and 5"})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Rating must be between 0 and 5"})
 		return
 	}
 
 	if err := h.Service.RateRecipe(c.Request.Context(), id, rating); err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Error: "Recipe not found"})
+			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Code: "NOT_FOUND", Message: "Recipe not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to rate recipe: " + err.Error()})
 		return
 	}
 
 	// Get updated recipe
 	recipe, err := h.Service.GetRecipe(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: err.Error()})
 		return
 	}
 
@@ -423,17 +432,17 @@ func (h *RecipeHandler) RateRecipe(c *gin.Context) {
 func (h *RecipeHandler) GetRecipeRatings(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Error: "Recipe ID is required"})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Recipe ID is required"})
 		return
 	}
 
 	ratings, err := h.Service.GetRecipeRatings(c.Request.Context(), id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Error: "Recipe not found"})
+			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Code: "NOT_FOUND", Message: "Recipe not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: err.Error()})
 		return
 	}
 
@@ -460,7 +469,7 @@ func (h *RecipeHandler) SearchRecipes(c *gin.Context) {
 
 	recipes, err := h.Service.SearchRecipes(c.Request.Context(), query, tags, difficulty)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: err.Error()})
 		return
 	}
 

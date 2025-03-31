@@ -1,4 +1,4 @@
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+/* Removed the CREATE EXTENSION statement */
 
 -- Create cuisines table
 CREATE TABLE IF NOT EXISTS cuisines (

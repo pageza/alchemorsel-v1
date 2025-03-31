@@ -1,6 +1,7 @@
 package dtos
 
-// ErrorResponse represents a standardized error response
+// ErrorResponse defines the standard error response according to the API contract.
 type ErrorResponse struct {
-	Error string `json:"error"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pageza/alchemorsel-v1/internal/dtos"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/services"
 )
@@ -41,7 +42,10 @@ func (h *CuisineHandler) RegisterRoutes(r *gin.RouterGroup) {
 func (h *CuisineHandler) List(c *gin.Context) {
 	cuisines, err := h.service.List(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list cuisines"})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to list cuisines",
+		})
 		return
 	}
 
@@ -59,13 +63,19 @@ func (h *CuisineHandler) List(c *gin.Context) {
 func (h *CuisineHandler) Create(c *gin.Context) {
 	var req RelatedEntityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Invalid request body",
+		})
 		return
 	}
 
 	cuisine := &models.Cuisine{Name: req.Name}
 	if err := h.service.Create(c.Request.Context(), cuisine); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create cuisine"})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to create cuisine",
+		})
 		return
 	}
 
@@ -81,7 +91,10 @@ func (h *CuisineHandler) GetByID(c *gin.Context) {
 	id := c.Param("id")
 	cuisine, err := h.service.GetByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Cuisine not found"})
+		c.JSON(http.StatusNotFound, dtos.ErrorResponse{
+			Code:    "NOT_FOUND",
+			Message: "Cuisine not found",
+		})
 		return
 	}
 
@@ -96,7 +109,10 @@ func (h *CuisineHandler) GetByID(c *gin.Context) {
 func (h *CuisineHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete cuisine"})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to delete cuisine",
+		})
 		return
 	}
 
@@ -125,7 +141,10 @@ func (h *DietHandler) RegisterRoutes(r *gin.RouterGroup) {
 func (h *DietHandler) List(c *gin.Context) {
 	diets, err := h.service.List(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list diets"})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to list diets",
+		})
 		return
 	}
 
@@ -143,13 +162,19 @@ func (h *DietHandler) List(c *gin.Context) {
 func (h *DietHandler) Create(c *gin.Context) {
 	var req RelatedEntityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Invalid request body",
+		})
 		return
 	}
 
 	diet := &models.Diet{Name: req.Name}
 	if err := h.service.Create(c.Request.Context(), diet); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create diet"})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to create diet",
+		})
 		return
 	}
 
@@ -165,7 +190,10 @@ func (h *DietHandler) GetByID(c *gin.Context) {
 	id := c.Param("id")
 	diet, err := h.service.GetByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Diet not found"})
+		c.JSON(http.StatusNotFound, dtos.ErrorResponse{
+			Code:    "NOT_FOUND",
+			Message: "Diet not found",
+		})
 		return
 	}
 
@@ -180,7 +208,10 @@ func (h *DietHandler) GetByID(c *gin.Context) {
 func (h *DietHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete diet"})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to delete diet",
+		})
 		return
 	}
 
@@ -209,7 +240,10 @@ func (h *ApplianceHandler) RegisterRoutes(r *gin.RouterGroup) {
 func (h *ApplianceHandler) List(c *gin.Context) {
 	appliances, err := h.service.List(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list appliances"})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to list appliances",
+		})
 		return
 	}
 
@@ -227,13 +261,19 @@ func (h *ApplianceHandler) List(c *gin.Context) {
 func (h *ApplianceHandler) Create(c *gin.Context) {
 	var req RelatedEntityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Invalid request body",
+		})
 		return
 	}
 
 	appliance := &models.Appliance{Name: req.Name}
 	if err := h.service.Create(c.Request.Context(), appliance); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create appliance"})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to create appliance",
+		})
 		return
 	}
 
@@ -249,7 +289,10 @@ func (h *ApplianceHandler) GetByID(c *gin.Context) {
 	id := c.Param("id")
 	appliance, err := h.service.GetByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Appliance not found"})
+		c.JSON(http.StatusNotFound, dtos.ErrorResponse{
+			Code:    "NOT_FOUND",
+			Message: "Appliance not found",
+		})
 		return
 	}
 
@@ -264,7 +307,10 @@ func (h *ApplianceHandler) GetByID(c *gin.Context) {
 func (h *ApplianceHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete appliance"})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to delete appliance",
+		})
 		return
 	}
 
@@ -293,7 +339,10 @@ func (h *TagHandler) RegisterRoutes(r *gin.RouterGroup) {
 func (h *TagHandler) List(c *gin.Context) {
 	tags, err := h.service.List(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list tags"})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to list tags",
+		})
 		return
 	}
 
@@ -311,13 +360,19 @@ func (h *TagHandler) List(c *gin.Context) {
 func (h *TagHandler) Create(c *gin.Context) {
 	var req RelatedEntityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Invalid request body",
+		})
 		return
 	}
 
 	tag := &models.Tag{Name: req.Name}
 	if err := h.service.Create(c.Request.Context(), tag); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create tag"})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to create tag",
+		})
 		return
 	}
 
@@ -333,7 +388,10 @@ func (h *TagHandler) GetByID(c *gin.Context) {
 	id := c.Param("id")
 	tag, err := h.service.GetByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Tag not found"})
+		c.JSON(http.StatusNotFound, dtos.ErrorResponse{
+			Code:    "NOT_FOUND",
+			Message: "Tag not found",
+		})
 		return
 	}
 
@@ -348,7 +406,10 @@ func (h *TagHandler) GetByID(c *gin.Context) {
 func (h *TagHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete tag"})
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to delete tag",
+		})
 		return
 	}
 

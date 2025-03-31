@@ -1,0 +1,131 @@
+{
+  "info": {
+    "_postman_id": "d3b9a5d2-1234-4f9a-8c3e-abcdef123456",
+    "name": "MVP E2E Tests",
+    "description": "Collection for MVP E2E tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwtToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Create User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Test User\", \"email\": \"testuser@example.com\", \"password\": \"password1\"}"
+        },
+        "url": {
+          "raw": "http://alchemorsel-service:8080/v1/users",
+          "protocol": "http",
+          "host": [
+            "alchemorsel-service"
+          ],
+          "port": "8080",
+          "path": [
+            "v1",
+            "users"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 201 || (pm.response.code === 409 && pm.response.json().error === 'user already exists')) {",
+              "    console.log('User created successfully (or already exists)');",
+              "} else {",
+              "    console.log('User creation failed');",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\": \"testuser@example.com\", \"password\": \"password1\"}"
+        },
+        "url": {
+          "raw": "http://alchemorsel-service:8080/v1/users/login",
+          "protocol": "http",
+          "host": [
+            "alchemorsel-service"
+          ],
+          "port": "8080",
+          "path": [
+            "v1",
+            "users",
+            "login"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    var jsonData = pm.response.json();",
+              "    pm.environment.set('jwtToken', jsonData.token);",
+              "    console.log('JWT Token set:', jsonData.token);",
+              "} else {",
+              "    console.log('Login failed');",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Current User",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://alchemorsel-service:8080/v1/users/me",
+          "protocol": "http",
+          "host": [
+            "alchemorsel-service"
+          ],
+          "port": "8080",
+          "path": [
+            "v1",
+            "users",
+            "me"
+          ]
+        }
+      }
+    }
+  ]
+} 
