@@ -28,27 +28,32 @@ func NewUserHandler(service services.UserServiceInterface) *UserHandler {
 
 // LoginUser converts LoginUser to a method that uses dependency injection.
 func (h *UserHandler) LoginUser(c *gin.Context) {
+	zap.S().Infow("Login attempt started", "ip", c.ClientIP())
 	var input struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
+		zap.S().Errorw("Login error binding JSON", "error", err)
 		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
 			Code:    "BAD_REQUEST",
 			Message: err.Error(),
 		})
 		return
 	}
+	zap.S().Debugw("Login credentials received", "email", input.Email)
 	if strings.TrimSpace(input.Email) == "" || strings.TrimSpace(input.Password) == "" {
+		zap.S().Warnw("Login attempt with missing credentials", "email", input.Email)
 		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
 			Code:    "BAD_REQUEST",
 			Message: "email and password are required",
 		})
 		return
 	}
-
+	zap.S().Infow("Authenticating user", "email", input.Email)
 	user, err := h.Service.Authenticate(c.Request.Context(), input.Email, input.Password)
 	if err != nil {
+		zap.S().Errorw("Authentication failed", "email", input.Email, "error", err)
 		if err.Error() == "user not found" || strings.Contains(err.Error(), "invalid credentials") {
 			c.JSON(http.StatusUnauthorized, dtos.ErrorResponse{
 				Code:    "UNAUTHORIZED",
@@ -62,10 +67,12 @@ func (h *UserHandler) LoginUser(c *gin.Context) {
 		})
 		return
 	}
+	zap.S().Infow("User authenticated", "user_id", user.ID)
 
 	// Ensure a JWT secret is set.
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
+		zap.S().Error("JWT secret not set")
 		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
 			Code:    "INTERNAL_ERROR",
 			Message: "JWT secret not set",
@@ -75,19 +82,20 @@ func (h *UserHandler) LoginUser(c *gin.Context) {
 
 	// Build a JWT token with the user's ID and an expiration.
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"id":  user.ID,
+		"sub": user.ID,
 		"exp": time.Now().Add(time.Hour).Unix(),
 	})
 
 	tokenString, err := token.SignedString([]byte(secret))
 	if err != nil {
+		zap.S().Errorw("Token generation failed", "error", err)
 		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
 			Code:    "INTERNAL_ERROR",
 			Message: "failed to generate token",
 		})
 		return
 	}
-
+	zap.S().Infow("Login successful, token generated", "user_id", user.ID)
 	// Return the token as a JSON object.
 	c.JSON(http.StatusOK, gin.H{"token": tokenString})
 }
@@ -291,18 +299,23 @@ func (h *UserHandler) ResetPassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "password reset successfully"})
 }
 
-// GetCurrentUser retrieves the current user using the authenticated context.
+// Modified GetCurrentUser function with detailed logging
 func (h *UserHandler) GetCurrentUser(c *gin.Context) {
+	zap.S().Infow("GetCurrentUser endpoint invoked", "client_ip", c.ClientIP())
 	userID, ok := getCurrentUserID(c)
 	if !ok {
+		zap.S().Warn("No current user ID found in context")
 		c.JSON(http.StatusUnauthorized, dtos.ErrorResponse{
 			Code:    "UNAUTHORIZED",
 			Message: "Unauthorized",
 		})
 		return
 	}
+	zap.S().Debugw("Retrieved current user ID from context", "user_id", userID)
+
 	user, err := h.Service.GetUser(c.Request.Context(), userID)
 	if err != nil {
+		zap.S().Errorw("Error retrieving user from service", "user_id", userID, "error", err)
 		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
 			Code:    "INTERNAL_ERROR",
 			Message: "Failed to get user: " + err.Error(),
@@ -310,12 +323,11 @@ func (h *UserHandler) GetCurrentUser(c *gin.Context) {
 		return
 	}
 	if user == nil {
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
-			Code:    "INTERNAL_ERROR",
-			Message: "Failed to get user",
-		})
+		zap.S().Warnw("User not found", "user_id", userID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
+	zap.S().Infow("Successfully retrieved current user", "user_id", user.ID, "email", user.Email)
 	c.JSON(http.StatusOK, user)
 }
 
