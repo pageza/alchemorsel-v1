@@ -36,6 +36,7 @@ services:
       - jwt_secret
       - postgres_user
       - postgres_password
+    env_file: .env
 
   postgres:
     image: ankane/pgvector

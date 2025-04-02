@@ -11,12 +11,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-      POSTGRES_DB: ${{ vars.POSTGRES_DB }}
+      PGUSER: ${{ secrets.POSTGRES_USER }}
+      PGPASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      PGDATABASE: ${{ vars.POSTGRES_DB }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
-      POSTGRES_HOST: ${{vars.POSTGRES_HOST}}
-      POSTGRES_PORT: ${{vars.POSTGRES_PORT}}
+      PGHOST: postgres
+      PGPORT: 5432
+      PORT: 8080
 
     steps:
       - name: Checkout repository
@@ -25,10 +26,14 @@ jobs:
       - name: Create dummy .env file
         run: touch .env
 
-      - name: Create dummy .env.production file
+      - name: Generate .env file for Docker Compose
         run: |
-          echo -n "JWT_SECRET=" > .env
-          printf "%s" "${JWT_SECRET%$'\n'}" >> .env
+          echo "PGUSER=${{ secrets.POSTGRES_USER }}" > .env
+          echo "PGPASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+          echo "PGDATABASE=${{ vars.POSTGRES_DB }}" >> .env
+          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
+          echo "PGHOST=postgres" >> .env
+          echo "PGPORT=5432" >> .env
 
       - name: Verify .env file exists
         run: |
@@ -98,9 +103,9 @@ jobs:
       - name: Ensure Docker secret files exist
         run: |
           mkdir -p secrets
-          touch secrets/postgres_password.txt
-          touch secrets/postgres_user.txt
-          touch jwt_secret
+          echo "${{ secrets.POSTGRES_PASSWORD }}" > secrets/postgres_password.txt
+          echo "${{ secrets.POSTGRES_USER }}" > secrets/postgres_user.txt
+          echo "${{ secrets.JWT_SECRET }}" > jwt_secret
 
       - name: Start Docker Services
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env up --build -d
@@ -109,7 +114,7 @@ jobs:
         run: docker compose exec app sh -c "echo 'JWT_SECRET from container:' \$JWT_SECRET"
 
       - name: Debug Environment Variables
-        run: echo "POSTGRES_USER=$POSTGRES_USER, POSTGRES_DB=$POSTGRES_DB, JWT_SECRET=$JWT_SECRET, POSTGRES_HOST=$POSTGRES_HOST, POSTGRES_PORT=$POSTGRES_PORT"
+        run: echo "PGUSER=$PGUSER, PGDATABASE=$PGDATABASE, JWT_SECRET=$JWT_SECRET, PGHOST=$PGHOST, PGPORT=$PGPORT"
 
       - name: Debug Docker Compose Config
         run: docker compose config
@@ -125,6 +130,19 @@ jobs:
 
       - name: List collections folder
         run: ls -la ${{ github.workspace }}/tests/e2e
+
+      - name: Wait for app service to be ready
+        run: |
+          for i in $(seq 1 10); do
+            if curl -s http://localhost:8080 > /dev/null; then
+              echo "App is ready"
+              exit 0
+            fi
+            echo "Waiting for app..."
+            sleep 5
+          done
+          echo "App did not become ready in time" >&2
+          exit 1
 
       - name: Run Newman E2E Tests for Collection
         run: |
