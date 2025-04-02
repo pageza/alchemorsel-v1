@@ -52,6 +52,20 @@ jobs:
           else
               echo "JWT_SECRET environment variable is not set."
           fi
+          echo "JWT_SECRET value lengths:"
+          echo "Length from .env.production: ${#SECRET}"
+          echo "Length from environment variable: ${#JWT_SECRET}"
+          echo "JWT_SECRET snippet from file: ${SECRET:0:5}"
+          echo "JWT_SECRET snippet from environment: ${JWT_SECRET:0:5}"
+
+      - name: Debug JWT_SECRET further
+        run: |
+          echo "JWT_SECRET raw hexdump (first 64 bytes):"
+          echo -n "$JWT_SECRET" | hexdump -C | head -n 4
+          echo "JWT_SECRET environment variable length: ${#JWT_SECRET}"
+
+      - name: Print full JWT_SECRET environment variable (debug)
+        run: env | grep -i jwt_secret
 
       - name: Set up Go
         uses: actions/setup-go@v4
