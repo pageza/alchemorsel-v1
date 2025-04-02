@@ -131,7 +131,7 @@ jobs:
           docker run --rm --network container:app \
             -v ${{ github.workspace }}/tests/e2e:/etc/newman/collections \
             postman/newman:alpine run /etc/newman/collections/newman_collection.json \
-              --delay-request 500 --reporters cli,junit
+              --delay-request 500 --reporters cli,junit --env-var baseUrl=http://localhost:8080
 
       - name: Dump Docker Container Logs
         if: always()
