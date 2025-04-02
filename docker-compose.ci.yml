@@ -1,8 +1,15 @@
 services:
   app:
     secrets: []
+    environment:
+      PGPASSWORD: ""
   postgres:
     volumes: []
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_PASSWORD: ""
+      POSTGRES_USER: postgres
+      POSTGRES_DB: recipesdb
 
 # Override global secrets to be empty, so that services referencing them don't try to mount missing files
 secrets: {} 
