@@ -26,8 +26,7 @@ jobs:
         run: touch .env
 
       - name: Create dummy .env.production file
-        run: |
-          printf "JWT_SECRET=%s" "$JWT_SECRET" > .env.production
+        run: printf "JWT_SECRET='%s'" "$JWT_SECRET" > .env.production
 
       - name: Verify .env.production file exists
         run: |
@@ -36,7 +35,10 @@ jobs:
           echo "Dumping contents of .env.production:"
           cat .env.production
           echo "JWT_SECRET debugging hash:"
-          SECRET=$(grep '^JWT_SECRET=' .env.production | cut -d'=' -f2)
+          read -r line < .env.production
+          SECRET="${line#JWT_SECRET=}"
+          SECRET="${SECRET#\'}"
+          SECRET="${SECRET%\'}"
           HASH=$(echo -n "$SECRET" | sha256sum | awk '{print $1}')
           echo "JWT_SECRET hash: $HASH"
           echo "Checking environment variable JWT_SECRET:"
@@ -52,9 +54,11 @@ jobs:
           else
               echo "JWT_SECRET environment variable is not set."
           fi
+          FILE_LEN=$(echo -n "$SECRET" | wc -c)
+          ENV_LEN=$(echo -n "$JWT_SECRET" | wc -c)
           echo "JWT_SECRET value lengths:"
-          echo "Length from .env.production: ${#SECRET}"
-          echo "Length from environment variable: ${#JWT_SECRET}"
+          echo "Length from .env.production: $FILE_LEN"
+          echo "Length from environment variable: $ENV_LEN"
           echo "JWT_SECRET snippet from file: ${SECRET:0:5}"
           echo "JWT_SECRET snippet from environment: ${JWT_SECRET:0:5}"
 
