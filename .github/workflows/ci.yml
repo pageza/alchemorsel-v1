@@ -76,6 +76,13 @@ jobs:
       - name: Print full JWT_SECRET environment variable (debug)
         run: env | grep -i jwt_secret
 
+      - name: Extra JWT_SECRET Debug Logging
+        run: |
+          echo "DEBUG: JWT_SECRET length: ${#JWT_SECRET}"
+          echo "DEBUG: JWT_SECRET SHA256: $(echo -n "$JWT_SECRET" | sha256sum)"
+          echo "DEBUG: JWT_SECRET hexdump (first 16 bytes):"
+          echo -n "$JWT_SECRET" | hexdump -C | head -n 1
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:

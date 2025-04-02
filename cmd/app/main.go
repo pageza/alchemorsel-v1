@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"time"
 
 	"github.com/pageza/alchemorsel-v1/internal/config"
@@ -44,6 +45,10 @@ func main() {
 	if err != nil {
 		logger.Fatal("Error creating configuration", zap.Error(err))
 	}
+
+	// Log the JWT_SECRET value from the environment for debugging
+	rawJWT := os.Getenv("JWT_SECRET")
+	logger.Info("APP JWT_SECRET details", zap.String("raw_value", rawJWT), zap.Int("length", len(rawJWT)))
 
 	dsn := cfg.GetDSN()
 	logger.Info("DSN constructed", zap.String("DSN", dsn))
