@@ -32,7 +32,10 @@ func TestRealAuthentication(t *testing.T) {
 
 	// Use the default secret defined in AuthMiddleware if not set externally
 	// In our test, we use "test-secret-key" if no JWT_SECRET is provided
-	secret := "test-secret-key"
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "test-secret-key"
+	}
 	token := generateTestToken(secret)
 
 	req, err := http.NewRequest(http.MethodGet, "/protected", nil)
