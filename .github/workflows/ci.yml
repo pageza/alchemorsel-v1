@@ -105,7 +105,7 @@ jobs:
         run: docker compose config
 
       - name: Run Integration Tests
-        run: go test -v ./tests/integration/...
+        run: go test -v ./tests/core/integration/...
 
       - name: Display Docker Containers
         run: docker ps
