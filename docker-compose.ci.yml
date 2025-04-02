@@ -2,7 +2,9 @@ services:
   app:
     secrets: []
     environment:
+      PGUSER: "postgres"
       PGPASSWORD: ""
+      PGDATABASE: "recipesdb"
   postgres:
     volumes: []
     environment:
