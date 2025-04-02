@@ -26,7 +26,8 @@ jobs:
         run: touch .env
 
       - name: Create dummy .env.production file
-        run: echo 'DUMMY=true' > .env.production
+        run: |
+          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" > .env.production
 
       - name: Verify .env.production file exists
         run: |
