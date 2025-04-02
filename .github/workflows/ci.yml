@@ -89,7 +89,7 @@ jobs:
         run: go test -v ./...
 
       - name: Start Docker Services
-        run: docker compose --env-file .env up --build -d
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env up --build -d
 
       - name: Debug Environment Variables
         run: echo "POSTGRES_USER=$POSTGRES_USER, POSTGRES_DB=$POSTGRES_DB, JWT_SECRET=$JWT_SECRET, POSTGRES_HOST=$POSTGRES_HOST, POSTGRES_PORT=$POSTGRES_PORT"
@@ -131,11 +131,11 @@ jobs:
 
       - name: Dump Docker Container Logs
         if: always()
-        run: docker compose -f docker-compose.yml logs
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs
 
       - name: Print logs on failure
         if: failure()
-        run: docker compose -f docker-compose.yml logs
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs
 
       - name: Ensure .env.production exists for cleanup
         run: |
@@ -145,4 +145,4 @@ jobs:
           ls -la .env.production
 
       - name: Cleanup
-        run: docker compose --env-file .env -f docker-compose.yml down -v 
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env down -v 

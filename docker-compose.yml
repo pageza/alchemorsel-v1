@@ -71,7 +71,7 @@ networks:
 
 secrets:
   jwt_secret:
-    file: ./secrets/jwt_secret.txt
+    file: ./jwt_secret
   postgres_user:
     file: ./secrets/postgres_user.txt
   postgres_password:

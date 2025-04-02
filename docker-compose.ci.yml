@@ -1,0 +1,6 @@
+services:
+  app:
+    secrets: []
+
+# Override global secrets to be empty, so that services referencing them don't try to mount missing files
+secrets: {} 
