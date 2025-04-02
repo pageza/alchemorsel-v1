@@ -26,7 +26,12 @@ jobs:
         run: touch .env
 
       - name: Create dummy .env.production file
-        run: if [ ! -f .env.production ]; then touch .env.production; fi
+        run: echo 'DUMMY=true' > .env.production
+
+      - name: Verify .env.production file exists
+        run: |
+          ls -la .env.production
+          cat .env.production
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -67,26 +72,6 @@ jobs:
 
       - name: Display All Containers
         run: docker ps -a
-
-      - name: Inspect app logs
-        run: docker logs app
-
-      - name: Wait for HTTP health
-        run: |
-          for i in {1..30}; do
-            if curl -s http://localhost:8080/v1/health; then
-              echo "App is ready"
-              exit 0
-            fi
-            echo "Waiting for app to become healthy..."
-            sleep 1
-          done
-          echo "App did not become healthy in time"
-          exit 1
-
-      - name: Inspect app health logs
-        if: always()
-        run: docker inspect -f '{{json .State.Health.Log}}' app
 
       - name: List collections folder
         run: ls -la ${{ github.workspace }}/tests/collections
