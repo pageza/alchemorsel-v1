@@ -30,14 +30,13 @@ jobs:
           echo -n "JWT_SECRET=" > .env
           printf "%s" "${JWT_SECRET%$'\n'}" >> .env
 
-      - name: Verify .env.production file exists
+      - name: Verify .env file exists
         run: |
-          echo "Listing contents of .env.production:"
-          ls -la .env.production
-          echo "Dumping contents of .env.production:"
-          cat .env.production
-          echo "JWT_SECRET debugging hash:"
-          SECRET=$(cut -d'=' -f2- .env.production)
+          echo "Listing contents of .env:"
+          ls -la .env
+          echo "Dumping contents of .env:"
+          cat .env
+          SECRET=$(cut -d'=' -f2- .env)
           HASH=$(echo -n "$SECRET" | sha256sum | awk '{print $1}')
           echo "JWT_SECRET hash: $HASH"
           echo "Checking environment variable JWT_SECRET:"
@@ -49,9 +48,9 @@ jobs:
               ENV_HASH=$(printf "%s" "$CLEANED_ENV" | sha256sum | awk '{print $1}')
               echo "JWT_SECRET environment hash: $ENV_HASH"
               if [ "$HASH" != "$ENV_HASH" ]; then
-                  echo "WARNING: JWT_SECRET hash from .env.production ($HASH) does not match JWT_SECRET from environment ($ENV_HASH)."
+                  echo "WARNING: JWT_SECRET hash from .env ($HASH) does not match JWT_SECRET from environment ($ENV_HASH)."
               else
-                  echo "JWT_SECRET hash from .env.production matches environment variable."
+                  echo "JWT_SECRET hash from .env matches environment variable."
               fi
           else
               echo "JWT_SECRET environment variable is not set."
@@ -59,7 +58,7 @@ jobs:
           FILE_LEN=$(echo -n "$SECRET" | wc -c)
           ENV_LEN=$(echo -n "$CLEANED_ENV" | wc -c)
           echo "JWT_SECRET value lengths:"
-          echo "Length from .env.production: $FILE_LEN"
+          echo "Length from .env: $FILE_LEN"
           echo "Length from environment variable: $ENV_LEN"
           echo "JWT_SECRET snippet from file: ${SECRET:0:5}"
           echo "JWT_SECRET snippet from environment: ${JWT_SECRET:0:5}"
