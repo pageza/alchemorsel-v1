@@ -105,6 +105,13 @@ jobs:
         if: failure()
         run: docker compose -f docker-compose.yml logs
 
+      - name: Ensure .env.production exists for cleanup
+        run: |
+          if [ ! -f .env.production ]; then
+            echo 'DUMMY=true' > .env.production
+          fi
+          ls -la .env.production
+
       - name: Cleanup
-        if: always()
-        run: docker compose -f docker-compose.yml down -v 
+        working-directory: ${{ github.workspace }}
+        run: docker compose --env-file ./.env.production -f docker-compose.yml down -v 
