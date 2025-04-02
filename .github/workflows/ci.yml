@@ -31,7 +31,9 @@ jobs:
 
       - name: Verify .env.production file exists
         run: |
+          echo "Listing contents of .env.production:"
           ls -la .env.production
+          echo "Dumping contents of .env.production:"
           cat .env.production
 
       - name: Set up Go
