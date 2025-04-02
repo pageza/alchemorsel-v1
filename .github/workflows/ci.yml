@@ -20,10 +20,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Create dummy .env file
         run: touch .env
+
+      - name: Create dummy .env.production file
+        run: if [ ! -f .env.production ]; then touch .env.production; fi
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -41,7 +44,8 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Install dependencies
-        run: go mod download
+        run: |
+          go mod download
 
       - name: Run Unit Tests
         run: go test -v ./...
@@ -89,18 +93,7 @@ jobs:
 
       - name: Generate Newman Environment File
         run: |
-          echo '{
-            "id": "env-local",
-            "name": "Local Environment",
-            "values": [
-              {
-                "key": "base_url",
-                "value": "http://localhost:8080",
-                "enabled": true,
-                "type": "text"
-              }
-            ]
-          }' > tests/environment.json
+          echo '{\n            "id": "env-local",\n            "name": "Local Environment",\n            "values": [\n              {\n                "key": "baseUrl",\n                "value": "http://localhost:8080",\n                "enabled": true,\n                "type": "text"\n              }\n            ]\n          }' > tests/environment.json
 
       - name: Run Newman E2E Tests for Recipe Endpoints
         run: |
