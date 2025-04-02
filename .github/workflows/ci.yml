@@ -114,7 +114,7 @@ jobs:
         run: docker ps -a
 
       - name: List collections folder
-        run: ls -la ${{ github.workspace }}/test/e2e
+        run: ls -la ${{ github.workspace }}/tests/e2e
 
       - name: Generate Newman Environment File
         run: |
