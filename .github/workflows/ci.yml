@@ -26,7 +26,9 @@ jobs:
         run: touch .env
 
       - name: Create dummy .env.production file
-        run: printf "JWT_SECRET=%s" "$JWT_SECRET" > .env.production
+        run: |
+          echo -n "JWT_SECRET=" > .env.production
+          printf "%s" "${JWT_SECRET%$'\n'}" >> .env.production
 
       - name: Verify .env.production file exists
         run: |
@@ -41,7 +43,7 @@ jobs:
           echo "Checking environment variable JWT_SECRET:"
           if [ -n "$JWT_SECRET" ]; then
               echo "JWT_SECRET environment is set."
-              ENV_HASH=$(echo -n "$JWT_SECRET" | sha256sum | awk '{print $1}')
+              ENV_HASH=$(printf "%s" "${JWT_SECRET%$'\n'}" | sha256sum | awk '{print $1}')
               echo "JWT_SECRET environment hash: $ENV_HASH"
               if [ "$HASH" != "$ENV_HASH" ]; then
                   echo "WARNING: JWT_SECRET hash from .env.production ($HASH) does not match JWT_SECRET from environment ($ENV_HASH)."
