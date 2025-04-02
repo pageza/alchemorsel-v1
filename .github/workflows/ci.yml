@@ -43,7 +43,10 @@ jobs:
           echo "Checking environment variable JWT_SECRET:"
           if [ -n "$JWT_SECRET" ]; then
               echo "JWT_SECRET environment is set."
-              ENV_HASH=$(printf "%s" "${JWT_SECRET%$'\n'}" | sha256sum | awk '{print $1}')
+              CLEANED_ENV=$(echo -n "$JWT_SECRET" | tr -d "\n")
+              echo "Cleaned JWT_SECRET:" "$CLEANED_ENV"
+              echo "Cleaned JWT_SECRET in hex:"; echo -n "$CLEANED_ENV" | hexdump -C
+              ENV_HASH=$(printf "%s" "$CLEANED_ENV" | sha256sum | awk '{print $1}')
               echo "JWT_SECRET environment hash: $ENV_HASH"
               if [ "$HASH" != "$ENV_HASH" ]; then
                   echo "WARNING: JWT_SECRET hash from .env.production ($HASH) does not match JWT_SECRET from environment ($ENV_HASH)."
@@ -54,7 +57,7 @@ jobs:
               echo "JWT_SECRET environment variable is not set."
           fi
           FILE_LEN=$(echo -n "$SECRET" | wc -c)
-          ENV_LEN=$(echo -n "$JWT_SECRET" | wc -c)
+          ENV_LEN=$(echo -n "$CLEANED_ENV" | wc -c)
           echo "JWT_SECRET value lengths:"
           echo "Length from .env.production: $FILE_LEN"
           echo "Length from environment variable: $ENV_LEN"
