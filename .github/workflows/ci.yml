@@ -56,7 +56,8 @@ jobs:
         run: go test -v ./...
 
       - name: Start Docker Services
-        run: docker compose up --build -d
+        working-directory: ${{ github.workspace }}
+        run: docker compose --env-file .env.production up --build -d
 
       - name: Debug Environment Variables
         run: echo "POSTGRES_USER=$POSTGRES_USER, POSTGRES_DB=$POSTGRES_DB, JWT_SECRET=$JWT_SECRET, POSTGRES_HOST=$POSTGRES_HOST, POSTGRES_PORT=$POSTGRES_PORT"
