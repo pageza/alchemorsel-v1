@@ -35,6 +35,23 @@ jobs:
           ls -la .env.production
           echo "Dumping contents of .env.production:"
           cat .env.production
+          echo "JWT_SECRET debugging hash:"
+          SECRET=$(grep '^JWT_SECRET=' .env.production | cut -d'=' -f2)
+          HASH=$(echo -n "$SECRET" | sha256sum | awk '{print $1}')
+          echo "JWT_SECRET hash: $HASH"
+          echo "Checking environment variable JWT_SECRET:"
+          if [ -n "$JWT_SECRET" ]; then
+              echo "JWT_SECRET environment is set."
+              ENV_HASH=$(echo -n "$JWT_SECRET" | sha256sum | awk '{print $1}')
+              echo "JWT_SECRET environment hash: $ENV_HASH"
+              if [ "$HASH" != "$ENV_HASH" ]; then
+                  echo "WARNING: JWT_SECRET hash from .env.production ($HASH) does not match JWT_SECRET from environment ($ENV_HASH)."
+              else
+                  echo "JWT_SECRET hash from .env.production matches environment variable."
+              fi
+          else
+              echo "JWT_SECRET environment variable is not set."
+          fi
 
       - name: Set up Go
         uses: actions/setup-go@v4
