@@ -114,25 +114,25 @@ jobs:
         run: docker ps -a
 
       - name: List collections folder
-        run: ls -la ${{ github.workspace }}/tests/collections
+        run: ls -la ${{ github.workspace }}/test/e2e
 
       - name: Generate Newman Environment File
         run: |
-          echo '{\n            "id": "env-local",\n            "name": "Local Environment",\n            "values": [\n              {\n                "key": "baseUrl",\n                "value": "http://localhost:8080",\n                "enabled": true,\n                "type": "text"\n              }\n            ]\n          }' > tests/environment.json
+          echo '{\n            "id": "env-local",\n            "name": "Local Environment",\n            "values": [\n              {\n                "key": "baseUrl",\n                "value": "http://localhost:8080",\n                "enabled": true,\n                "type": "text"\n              }\n            ]\n          }' > test/e2e/environment.json
 
       - name: Run Newman E2E Tests for Recipe Endpoints
         run: |
           docker run --rm --network container:app \
-            -v ${{ github.workspace }}/tests/collections:/etc/newman/collections \
-            -v ${{ github.workspace }}/tests/environment.json:/etc/newman/environment.json \
+            -v ${{ github.workspace }}/test/e2e:/etc/newman/collections \
+            -v ${{ github.workspace }}/test/e2e/environment.json:/etc/newman/environment.json \
             postman/newman:alpine run /etc/newman/collections/recipe_endpoints.postman_collection.json \
               --environment "/etc/newman/environment.json" --delay-request 500 --reporters cli,junit
 
       - name: Run Newman E2E Tests for User Endpoints
         run: |
           docker run --rm --network container:app \
-            -v ${{ github.workspace }}/tests/collections:/etc/newman/collections \
-            -v ${{ github.workspace }}/tests/environment.json:/etc/newman/environment.json \
+            -v ${{ github.workspace }}/test/e2e:/etc/newman/collections \
+            -v ${{ github.workspace }}/test/e2e/environment.json:/etc/newman/environment.json \
             postman/newman:alpine run /etc/newman/collections/user_endpoints.postman_collection.json \
               --environment "/etc/newman/environment.json" --delay-request 500 --reporters cli,junit
 
