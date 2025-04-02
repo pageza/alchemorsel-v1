@@ -105,6 +105,9 @@ jobs:
       - name: Start Docker Services
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --env-file .env up --build -d
 
+      - name: Debug JWT_SECRET from container environment
+        run: docker compose exec app sh -c "echo 'JWT_SECRET from container:' \$JWT_SECRET"
+
       - name: Debug Environment Variables
         run: echo "POSTGRES_USER=$POSTGRES_USER, POSTGRES_DB=$POSTGRES_DB, JWT_SECRET=$JWT_SECRET, POSTGRES_HOST=$POSTGRES_HOST, POSTGRES_PORT=$POSTGRES_PORT"
 
@@ -144,6 +147,9 @@ jobs:
       - name: Print logs on failure
         if: failure()
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml logs
+
+      - name: Debug Docker Secret File Content
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm app cat /run/secrets/jwt_secret
 
       - name: Ensure .env.production exists for cleanup
         run: |

@@ -135,9 +135,10 @@ func (c *Config) loadFromEnv() error {
 
 	// JWT configuration
 	c.JWT.Secret = getEnvOrDefault("JWT_SECRET", "your-secret-key")
+	log.Printf("Loaded JWT_SECRET length: %d", len(c.JWT.Secret))
+	log.Printf("DEBUG: Config JWT_SECRET value: %s", c.JWT.Secret)
 	c.JWT.ExpirationHours = getEnvIntOrDefault("JWT_EXPIRATION_HOURS", 24)
 	c.JWT.RefreshHours = getEnvIntOrDefault("JWT_REFRESH_HOURS", 168)
-	log.Printf("Loaded JWT_SECRET length: %d", len(c.JWT.Secret))
 	log.Printf("Loaded DB configuration: Host=%s, Port=%d, DBName=%s", c.Database.Host, c.Database.Port, c.Database.DBName)
 
 	// Email configuration

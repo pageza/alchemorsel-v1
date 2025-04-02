@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -37,6 +38,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		secret := os.Getenv("JWT_SECRET")
+		log.Printf("DEBUG: auth middleware JWT_SECRET value: %s", secret)
 		if secret == "" {
 			secret = "test-secret-key" // Use test secret if not set
 		}

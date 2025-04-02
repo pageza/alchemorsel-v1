@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -71,6 +72,7 @@ func (h *UserHandler) LoginUser(c *gin.Context) {
 
 	// Ensure a JWT secret is set.
 	secret := os.Getenv("JWT_SECRET")
+	log.Printf("DEBUG: user_handlers JWT_SECRET value: %s", secret)
 	if secret == "" {
 		zap.S().Error("JWT secret not set")
 		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{

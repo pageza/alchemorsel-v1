@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"os"
 	"time"
 
@@ -14,6 +15,10 @@ import (
 )
 
 func main() {
+	// DEBUG: Log JWT_SECRET from environment for CI debugging
+	jwtSecret := os.Getenv("JWT_SECRET")
+	log.Printf("DEBUG: JWT_SECRET inside app: %s", jwtSecret)
+
 	// Initialize logger with console-only output
 	logConfig := logging.LogConfig{
 		LogLevel:      "debug",
