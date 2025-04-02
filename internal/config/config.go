@@ -62,7 +62,7 @@ type RateLimitConfig struct {
 
 // JWTConfig holds JWT configuration
 type JWTConfig struct {
-	Secret          string `env:"JWT_SECRET" envDefault:"your-secret-key" validate:"required,min=32"`
+	Secret          string `env:"JWT_SECRET" envDefault:"default-super-long-ci-secret-key-123456" validate:"required,min=32"`
 	ExpirationHours int    `env:"JWT_EXPIRATION_HOURS" envDefault:"24" validate:"required,min=1"`
 	RefreshHours    int    `env:"JWT_REFRESH_HOURS" envDefault:"168" validate:"required,min=1"` // 7 days
 }
@@ -134,7 +134,7 @@ func (c *Config) loadFromEnv() error {
 	c.RateLimit.ExpirationTTL = getEnvDurationOrDefault("RATE_LIMIT_EXPIRATION", time.Hour)
 
 	// JWT configuration
-	c.JWT.Secret = getEnvOrDefault("JWT_SECRET", "your-secret-key")
+	c.JWT.Secret = getEnvOrDefault("JWT_SECRET", "default-super-long-ci-secret-key-123456")
 	log.Printf("Loaded JWT_SECRET length: %d", len(c.JWT.Secret))
 	log.Printf("DEBUG: Config JWT_SECRET value: %s", c.JWT.Secret)
 	c.JWT.ExpirationHours = getEnvIntOrDefault("JWT_EXPIRATION_HOURS", 24)
@@ -252,7 +252,11 @@ func (c *Config) getSQLiteDSN() string {
 
 // Helper functions for environment variables
 func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
+	value := os.Getenv(key)
+	if key == "JWT_SECRET" {
+		log.Printf("DEBUG: getEnvOrDefault for JWT_SECRET returns raw value: %q", value)
+	}
+	if value != "" {
 		return value
 	}
 	return defaultValue
