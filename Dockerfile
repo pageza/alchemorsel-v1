@@ -49,6 +49,8 @@ COPY --from=builder /app/internal/migrations /app/migrations
 
 # Copy environment file
 COPY --from=builder /app/.env.development ./.env.development
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Use non-root user
 USER appuser

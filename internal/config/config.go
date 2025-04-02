@@ -33,11 +33,11 @@ type Config struct {
 // DatabaseConfig holds database configuration settings
 type DatabaseConfig struct {
 	Driver            string        `env:"DB_DRIVER" envDefault:"postgres" validate:"required,oneof=postgres sqlite"`
-	Host              string        `env:"DB_HOST" envDefault:"localhost" validate:"required"`
-	Port              int           `env:"DB_PORT" envDefault:"5432" validate:"required,min=1,max=65535"`
-	User              string        `env:"DB_USER" envDefault:"postgres" validate:"required"`
-	Password          string        `env:"DB_PASSWORD" envDefault:"postgres" validate:"required"`
-	DBName            string        `env:"DB_NAME" envDefault:"alchemorsel" validate:"required"`
+	Host              string        `env:"POSTGRES_HOST" envDefault:"localhost" validate:"required"`
+	Port              int           `env:"POSTGRES_PORT" envDefault:"5432" validate:"required,min=1,max=65535"`
+	User              string        `env:"POSTGRES_USER" envDefault:"postgres" validate:"required"`
+	Password          string        `env:"POSTGRES_PASSWORD" envDefault:"postgres" validate:"required"`
+	DBName            string        `env:"POSTGRES_DB" envDefault:"alchemorsel" validate:"required"`
 	SSLMode           string        `env:"DB_SSL_MODE" envDefault:"disable" validate:"required,oneof=disable require verify-ca verify-full"`
 	BackupDir         string        `env:"DB_BACKUP_DIR" envDefault:"/var/backups/db" validate:"required"`
 	BackupRetention   time.Duration `env:"DB_BACKUP_RETENTION" envDefault:"168h" validate:"required"` // 7 days
@@ -111,11 +111,11 @@ func NewConfig() (*Config, error) {
 func (c *Config) loadFromEnv() error {
 	// Database configuration
 	c.Database.Driver = getEnvOrDefault("DB_DRIVER", "postgres")
-	c.Database.Host = getEnvOrDefault("DB_HOST", "localhost")
-	c.Database.Port = getEnvIntOrDefault("DB_PORT", 5432)
-	c.Database.User = getEnvOrDefault("DB_USER", "postgres")
-	c.Database.Password = getEnvOrDefault("DB_PASSWORD", "postgres")
-	c.Database.DBName = getEnvOrDefault("DB_NAME", "alchemorsel")
+	c.Database.Host = getEnvOrDefault("POSTGRES_HOST", "localhost")
+	c.Database.Port = getEnvIntOrDefault("POSTGRES_PORT", 5432)
+	c.Database.User = getEnvOrDefault("POSTGRES_USER", "postgres")
+	c.Database.Password = getEnvOrDefault("POSTGRES_PASSWORD", "postgres")
+	c.Database.DBName = getEnvOrDefault("POSTGRES_DB", "alchemorsel")
 	c.Database.SSLMode = getEnvOrDefault("DB_SSL_MODE", "disable")
 	c.Database.BackupDir = getEnvOrDefault("DB_BACKUP_DIR", "/var/backups/db")
 	c.Database.BackupRetention = getEnvDurationOrDefault("DB_BACKUP_RETENTION", 7*24*time.Hour)
@@ -137,6 +137,8 @@ func (c *Config) loadFromEnv() error {
 	c.JWT.Secret = getEnvOrDefault("JWT_SECRET", "your-secret-key")
 	c.JWT.ExpirationHours = getEnvIntOrDefault("JWT_EXPIRATION_HOURS", 24)
 	c.JWT.RefreshHours = getEnvIntOrDefault("JWT_REFRESH_HOURS", 168)
+	log.Printf("Loaded JWT_SECRET length: %d", len(c.JWT.Secret))
+	log.Printf("Loaded DB configuration: Host=%s, Port=%d, DBName=%s", c.Database.Host, c.Database.Port, c.Database.DBName)
 
 	// Email configuration
 	c.Email.Host = getEnvOrDefault("EMAIL_HOST", "smtp.gmail.com")

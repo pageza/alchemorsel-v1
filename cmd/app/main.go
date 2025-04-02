@@ -39,12 +39,22 @@ func main() {
 	}
 	logger.Info("Configuration loaded successfully")
 
+	// Build configuration and DSN using the config package
+	cfg, err := config.NewConfig()
+	if err != nil {
+		logger.Fatal("Error creating configuration", zap.Error(err))
+	}
+
+	dsn := cfg.GetDSN()
+	logger.Info("DSN constructed", zap.String("DSN", dsn))
+
 	// Initialize the database connection with retry logic
 	var database *gorm.DB
 	maxAttempts := 10
 	for i := 1; i <= maxAttempts; i++ {
-		config := db.NewConfig()
-		database, err = db.InitDB(config)
+		// Use db.NewConfig() as provided
+		dbConfig := db.NewConfig()
+		database, err = db.InitDB(dbConfig)
 		if err == nil {
 			logger.Info("Successfully connected to database")
 			break

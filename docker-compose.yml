@@ -3,8 +3,6 @@ services:
   app:
     build: .
     container_name: app
-    env_file:
-      - .env.production
     ports:
       - "8080:8080"
     depends_on:
@@ -19,13 +17,33 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    entrypoint: /app/entrypoint.sh
+    command: []
+    environment:
+      DB_DRIVER: ${DB_DRIVER:-postgres}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-default-model}
+      HOST: ${HOST:-0.0.0.0}
+      LLM_ENDPOINT: ${LLM_ENDPOINT:-http://localhost:5000}
+      PORT: ${PORT:-8080}
+      POSTGRES_DB: recipesdb
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_HOST: ${REDIS_HOST:-localhost}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: recipesdb
+    secrets:
+      - jwt_secret
+      - postgres_user
+      - postgres_password
 
   postgres:
     image: ankane/pgvector
     container_name: postgres
     environment:
-      POSTGRES_DB: persistent_db
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: recipesdb
+      POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
     ports:
       - "5432:5432"
@@ -51,3 +69,11 @@ volumes:
 networks:
   alchemorsel-network:
     driver: bridge
+
+secrets:
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  postgres_user:
+    file: ./secrets/postgres_user.txt
+  postgres_password:
+    file: ./secrets/postgres_password.txt

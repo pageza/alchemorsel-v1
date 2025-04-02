@@ -32,12 +32,11 @@
           "raw": "{\"name\": \"Test User\", \"email\": \"testuser@example.com\", \"password\": \"password1\"}"
         },
         "url": {
-          "raw": "http://alchemorsel-service:8080/v1/users",
+          "raw": "http://{{baseUrl}}/v1/users",
           "protocol": "http",
           "host": [
-            "alchemorsel-service"
+            "{{baseUrl}}"
           ],
-          "port": "8080",
           "path": [
             "v1",
             "users"
@@ -76,12 +75,11 @@
           "raw": "{\"email\": \"testuser@example.com\", \"password\": \"password1\"}"
         },
         "url": {
-          "raw": "http://alchemorsel-service:8080/v1/users/login",
+          "raw": "http://{{baseUrl}}/v1/users/login",
           "protocol": "http",
           "host": [
-            "alchemorsel-service"
+            "{{baseUrl}}"
           ],
-          "port": "8080",
           "path": [
             "v1",
             "users",
@@ -113,12 +111,11 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "http://alchemorsel-service:8080/v1/users/me",
+          "raw": "http://{{baseUrl}}/v1/users/me",
           "protocol": "http",
           "host": [
-            "alchemorsel-service"
+            "{{baseUrl}}"
           ],
-          "port": "8080",
           "path": [
             "v1",
             "users",
