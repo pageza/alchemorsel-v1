@@ -126,18 +126,11 @@ jobs:
       - name: List collections folder
         run: ls -la ${{ github.workspace }}/tests/e2e
 
-      - name: Run Newman E2E Tests for Recipe Endpoints
+      - name: Run Newman E2E Tests for Collection
         run: |
           docker run --rm --network container:app \
-            -v ${{ github.workspace }}/test/e2e:/etc/newman/collections \
-            postman/newman:alpine run /etc/newman/collections/recipe_endpoints.postman_collection.json \
-              --delay-request 500 --reporters cli,junit
-
-      - name: Run Newman E2E Tests for User Endpoints
-        run: |
-          docker run --rm --network container:app \
-            -v ${{ github.workspace }}/test/e2e:/etc/newman/collections \
-            postman/newman:alpine run /etc/newman/collections/user_endpoints.postman_collection.json \
+            -v ${{ github.workspace }}/tests/e2e:/etc/newman/collections \
+            postman/newman:alpine run /etc/newman/collections/newman_collection.json \
               --delay-request 500 --reporters cli,junit
 
       - name: Dump Docker Container Logs
