@@ -16,6 +16,9 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Ensure .env exists
+RUN if [ ! -f .env ]; then echo 'DUMMY=true' > .env; fi
+
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o main ./cmd/app
 
@@ -48,7 +51,7 @@ COPY --from=builder /app/main .
 COPY --from=builder /app/internal/migrations /app/migrations
 
 # Copy environment file
-COPY --from=builder /app/.env.development ./.env.development
+COPY --from=builder /app/.env ./.env
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 

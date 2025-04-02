@@ -27,8 +27,8 @@ jobs:
 
       - name: Create dummy .env.production file
         run: |
-          echo -n "JWT_SECRET=" > .env.production
-          printf "%s" "${JWT_SECRET%$'\n'}" >> .env.production
+          echo -n "JWT_SECRET=" > .env
+          printf "%s" "${JWT_SECRET%$'\n'}" >> .env
 
       - name: Verify .env.production file exists
         run: |
@@ -90,7 +90,7 @@ jobs:
         run: go test -v ./...
 
       - name: Start Docker Services
-        run: docker compose --env-file .env.production up --build -d
+        run: docker compose --env-file .env up --build -d
 
       - name: Debug Environment Variables
         run: echo "POSTGRES_USER=$POSTGRES_USER, POSTGRES_DB=$POSTGRES_DB, JWT_SECRET=$JWT_SECRET, POSTGRES_HOST=$POSTGRES_HOST, POSTGRES_PORT=$POSTGRES_PORT"
@@ -146,4 +146,4 @@ jobs:
           ls -la .env.production
 
       - name: Cleanup
-        run: docker compose --env-file .env.production -f docker-compose.yml down -v 
+        run: docker compose --env-file .env -f docker-compose.yml down -v 
