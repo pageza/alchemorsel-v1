@@ -64,26 +64,29 @@ func NewLogger(config LogConfig) (*Logger, error) {
 		config: config,
 	}
 
+	// FORCE console logging to be enabled for debugging purposes
+	l.config.EnableConsole = true
+
 	// Initialize log rotation
-	if config.EnableFile {
+	if l.config.EnableFile {
 		rotator := &lumberjack.Logger{
-			Filename:   filepath.Join(config.LogDir, "app.log"),
-			MaxSize:    config.MaxSize,
-			MaxBackups: config.MaxBackups,
-			MaxAge:     config.MaxAge,
-			Compress:   config.Compress,
+			Filename:   filepath.Join(l.config.LogDir, "app.log"),
+			MaxSize:    l.config.MaxSize,
+			MaxBackups: l.config.MaxBackups,
+			MaxAge:     l.config.MaxAge,
+			Compress:   l.config.Compress,
 		}
 		l.rotator = rotator
 	}
 
 	// Initialize log compressor
-	if config.EnableCompression {
-		l.compressor = NewLogCompressor(config.LogDir)
+	if l.config.EnableCompression {
+		l.compressor = NewLogCompressor(l.config.LogDir)
 	}
 
 	// Initialize elastic logger if enabled
-	if config.EnableElastic {
-		elastic, err := NewElasticLogger(config.ElasticURL, config.ElasticIndex)
+	if l.config.EnableElastic {
+		elastic, err := NewElasticLogger(l.config.ElasticURL, l.config.ElasticIndex)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize elastic logger: %w", err)
 		}
@@ -91,12 +94,14 @@ func NewLogger(config LogConfig) (*Logger, error) {
 	}
 
 	// Configure zap logger
-	encoderConfig := zap.NewProductionEncoderConfig()
+	zapCfg := zap.NewProductionConfig()
+	zapCfg.Level = zap.NewAtomicLevelAt(zap.DebugLevel) // Enable debug-level logging
+	encoderConfig := zapCfg.EncoderConfig
 	encoderConfig.TimeKey = "timestamp"
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
 	var encoder zapcore.Encoder
-	if config.LogFormat == "json" {
+	if l.config.LogFormat == "json" {
 		encoder = zapcore.NewJSONEncoder(encoderConfig)
 	} else {
 		encoder = zapcore.NewConsoleEncoder(encoderConfig)
@@ -104,8 +109,8 @@ func NewLogger(config LogConfig) (*Logger, error) {
 
 	var cores []zapcore.Core
 
-	// Add console core if enabled
-	if config.EnableConsole {
+	// Add console core if enabled (forced enabled above)
+	if l.config.EnableConsole {
 		consoleCore := zapcore.NewCore(
 			encoder,
 			zapcore.AddSync(os.Stdout),
@@ -115,7 +120,7 @@ func NewLogger(config LogConfig) (*Logger, error) {
 	}
 
 	// Add file core if enabled
-	if config.EnableFile {
+	if l.config.EnableFile {
 		fileCore := zapcore.NewCore(
 			encoder,
 			zapcore.AddSync(l.rotator),
@@ -127,6 +132,7 @@ func NewLogger(config LogConfig) (*Logger, error) {
 	// Create multi-core logger
 	core := zapcore.NewTee(cores...)
 	l.logger = zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+	zap.ReplaceGlobals(l.logger) // Replace the global logger with our configured logger
 
 	return l, nil
 }

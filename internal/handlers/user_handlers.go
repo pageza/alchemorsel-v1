@@ -335,7 +335,99 @@ func (h *UserHandler) GetCurrentUser(c *gin.Context) {
 
 // UpdateCurrentUser updates the current user's information.
 func (h *UserHandler) UpdateCurrentUser(c *gin.Context) {
+	// Temporarily disable PUT update endpoint logic and return a not implemented response
+	c.JSON(http.StatusNotImplemented, dtos.ErrorResponse{
+		Code:    "NOT_IMPLEMENTED",
+		Message: "PUT update endpoint is temporarily disabled. Please use PATCH instead.",
+	})
+
+	/*
+		// Original PUT logic commented out for now:
+		zap.S().Info("UpdateCurrentUser handler reached")
+		userID, ok := getCurrentUserID(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, dtos.ErrorResponse{
+				Code:    "UNAUTHORIZED",
+				Message: "Unauthorized",
+			})
+			return
+		}
+
+		var input struct {
+			Name     string `json:"name" binding:"required"`
+			Email    string `json:"email" binding:"required"`
+			Password string `json:"password" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+				Code:    "BAD_REQUEST",
+				Message: "Invalid request body: " + err.Error(),
+			})
+			return
+		}
+
+		// Log the input using a simple formatted string
+		zap.S().Info("UpdateCurrentUser input: " + fmt.Sprintf("name=%s, email=%s, password=%s", input.Name, input.Email, input.Password))
+
+		updatedUser := models.User{
+			Name:     input.Name,
+			Email:    input.Email,
+			Password: input.Password,
+		}
+
+		if err := h.Service.UpdateUser(c.Request.Context(), userID, &updatedUser); err != nil {
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to update user: " + err.Error(),
+			})
+			return
+		}
+
+		// Retrieve the updated user
+		user, err := h.Service.GetUser(c.Request.Context(), userID)
+		if err != nil || user == nil {
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to retrieve updated user",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, dtos.UserResponse{
+			Name:     user.Name,
+			Email:    user.Email,
+			Password: user.Password,
+		})
+	*/
+}
+
+// Updated PatchCurrentUser with extensive logging
+func (h *UserHandler) PatchCurrentUser(c *gin.Context) {
+	// TRACE: entering the endpoint
+	zap.S().Debug("TRACE: Entering PatchCurrentUser endpoint.")
+	zap.S().Debugw("PATCH /v1/users/me endpoint hit", "path", c.Request.URL.Path, "method", c.Request.Method)
+
+	var patchData map[string]interface{}
+	if err := c.ShouldBindJSON(&patchData); err != nil {
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Invalid request body: " + err.Error(),
+		})
+		return
+	}
+	// TRACE: JSON payload successfully bound
+	zap.S().Debugw("TRACE: JSON payload bound", "patchData", patchData)
+
+	// Existing logs for received payload
+	zap.S().Infow("PatchCurrentUser: Received patch data", "patchData", patchData)
+	zap.S().Debugw("Received patch update for user", "patchData", patchData)
+
 	userID, ok := getCurrentUserID(c)
+	if ok {
+		zap.S().Debugw("PatchCurrentUser: Extracted userID", "userID", userID)
+	} else {
+		zap.S().Warnw("PatchCurrentUser: No valid userID found in context")
+	}
 	if !ok {
 		c.JSON(http.StatusUnauthorized, dtos.ErrorResponse{
 			Code:    "UNAUTHORIZED",
@@ -344,29 +436,29 @@ func (h *UserHandler) UpdateCurrentUser(c *gin.Context) {
 		return
 	}
 
-	var input struct {
-		Name  string `json:"name" binding:"required"`
-		Email string `json:"email" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
-			Code:    "BAD_REQUEST",
-			Message: "Invalid request body: " + err.Error(),
-		})
-		return
+	zap.S().Debugw("PatchCurrentUser: Checking simulate_failure flag", "patchData", patchData)
+	if simulate, exists := patchData["simulate_failure"]; exists {
+		if b, ok := simulate.(bool); (ok && b) || (!ok && simulate == "true") {
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to update user: simulated failure",
+			})
+			return
+		}
 	}
 
-	updatedUser := models.User{
-		Name:  input.Name,
-		Email: input.Email,
-	}
-	if err := h.Service.UpdateUser(c.Request.Context(), userID, &updatedUser); err != nil {
+	// TRACE: call service layer to patch the user
+	zap.S().Debug("TRACE: Calling PatchUser service from handler.")
+	if err := h.Service.PatchUser(c.Request.Context(), userID, patchData); err != nil {
+		zap.S().Errorw("PatchCurrentUser: PatchUser service call failed", "userID", userID, "error", err)
 		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
 			Code:    "INTERNAL_ERROR",
 			Message: "Failed to update user: " + err.Error(),
 		})
 		return
 	}
+	// TRACE: successfully returned from service layer
+	zap.S().Debug("TRACE: PatchUser service call completed successfully.")
 
 	// Retrieve the updated user
 	user, err := h.Service.GetUser(c.Request.Context(), userID)
@@ -378,56 +470,13 @@ func (h *UserHandler) UpdateCurrentUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dtos.UserResponse{
-		Name:  user.Name,
-		Email: user.Email,
-	})
-}
+	// TRACE: exiting endpoint with updated user
+	zap.S().Debugw("TRACE: Exiting PatchCurrentUser endpoint with updated user", "userID", userID, "updatedUser", user)
 
-// PatchCurrentUser applies partial updates to the current user.
-func (h *UserHandler) PatchCurrentUser(c *gin.Context) {
-	var patchData map[string]interface{}
-	if err := c.ShouldBindJSON(&patchData); err != nil {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
-			Code:    "BAD_REQUEST",
-			Message: "Invalid request body: " + err.Error(),
-		})
-		return
-	}
-	userID, ok := getCurrentUserID(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, dtos.ErrorResponse{
-			Code:    "UNAUTHORIZED",
-			Message: "Unauthorized",
-		})
-		return
-	}
-	// Simulate failure if requested; handle both bool and string "true"
-	if simulate, exists := patchData["simulate_failure"]; exists {
-		if b, ok := simulate.(bool); (ok && b) || (!ok && simulate == "true") {
-			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
-				Code:    "INTERNAL_ERROR",
-				Message: "Failed to update user: simulated failure",
-			})
-			return
-		}
-	}
-	if err := h.Service.PatchUser(c.Request.Context(), userID, patchData); err != nil {
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
-			Code:    "INTERNAL_ERROR",
-			Message: "Failed to update user: " + err.Error(),
-		})
-		return
-	}
-	user, err := h.Service.GetUser(c.Request.Context(), userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
-			Code:    "INTERNAL_ERROR",
-			Message: "Failed to update user: " + err.Error(),
-		})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"user": user})
+	c.JSON(http.StatusOK, gin.H{
+		"name":  user.Name,
+		"email": user.Email,
+	})
 }
 
 // DeleteCurrentUser deactivates the current user.

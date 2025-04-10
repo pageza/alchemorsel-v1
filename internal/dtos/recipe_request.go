@@ -39,17 +39,22 @@ type RecipeRequest struct {
 // If no candidate is acceptable from the database search, additional
 // modification instructions can be supplied for the LLM.
 type RecipeResolutionRequest struct {
-	Title             string   `json:"title" binding:"required"`
+	Title string `json:"title" binding:"required"`
+	Query string `json:"query,omitempty"`
+
 	Ingredients       []string `json:"ingredients" binding:"required"`
 	Steps             []string `json:"steps" binding:"required"`
 	NutritionalInfo   string   `json:"nutritional_info,omitempty"`
 	AllergyDisclaimer string   `json:"allergy_disclaimer,omitempty"`
 	Appliances        []string `json:"appliances,omitempty"`
+
 	// New fields for filtering by cuisines and diets
 	Cuisines []string `json:"cuisines,omitempty"`
 	Diets    []string `json:"diets,omitempty"`
+
 	// Tags for recipe categorization and search
 	Tags []string `json:"tags,omitempty"`
+
 	// Additional instructions on how to modify or generate a new recipe
 	ModificationInstructions string `json:"modification_instructions,omitempty"`
 }

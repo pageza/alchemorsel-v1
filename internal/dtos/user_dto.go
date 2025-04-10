@@ -11,6 +11,7 @@ type UserResponse struct {
 	ID            string    `json:"id"`
 	Name          string    `json:"name"`
 	Email         string    `json:"email"`
+	Password      string    `json:"password"`
 	IsAdmin       bool      `json:"is_admin"`
 	EmailVerified bool      `json:"email_verified"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -23,6 +24,7 @@ func NewUserResponse(user *models.User) UserResponse {
 		ID:            user.ID,
 		Name:          user.Name,
 		Email:         user.Email,
+		Password:      user.Password,
 		IsAdmin:       user.IsAdmin,
 		EmailVerified: user.EmailVerified,
 		CreatedAt:     user.CreatedAt,

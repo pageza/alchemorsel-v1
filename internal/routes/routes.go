@@ -91,6 +91,10 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
 		// Initialize handlers
 		userHandler := handlers.NewUserHandler(userService)
 		recipeHandler := handlers.NewRecipeHandler(recipeService)
+		recipeResolutionHandler := handlers.NewRecipeResolutionHandler(recipeService)
+		// New multi-step resolution service and handler
+		recipeResolutionService := services.NewRecipeResolutionService()
+		recipeMultistepHandler := handlers.NewRecipeMultistepResolutionHandler(recipeResolutionService)
 
 		// Only add the rate limiter if DISABLE_RATE_LIMITER is not set to "true".
 		if os.Getenv("DISABLE_RATE_LIMITER") != "true" {
@@ -128,7 +132,9 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
 			secured.POST("/recipes", recipeHandler.SaveRecipe)
 			secured.PUT("/recipes/:id", recipeHandler.UpdateRecipe)
 			secured.DELETE("/recipes/:id", recipeHandler.DeleteRecipe)
-			secured.POST("/recipes/resolve", recipeHandler.ResolveRecipe)
+			secured.POST("/recipes/resolve", recipeResolutionHandler.ResolveRecipe)
+			secured.POST("/recipes/resolve/query", recipeMultistepHandler.QueryRecipe)
+			secured.POST("/recipes/resolve/modify", recipeMultistepHandler.ModifyRecipe)
 			secured.POST("/recipes/:id/rate", recipeHandler.RateRecipe)
 			secured.GET("/recipes/:id/ratings", recipeHandler.GetRecipeRatings)
 			secured.GET("/recipes/search", recipeHandler.SearchRecipes)

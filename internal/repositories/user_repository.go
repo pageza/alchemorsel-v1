@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/google/uuid"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"gorm.io/gorm"
@@ -177,7 +179,20 @@ func (r *DefaultUserRepository) CreateUser(ctx context.Context, user *models.Use
 }
 
 func (r *DefaultUserRepository) UpdateUser(ctx context.Context, user *models.User) error {
-	return r.db.WithContext(ctx).Save(user).Error
+	// TRACE: entering the repository update function
+	zap.S().Debug("TRACE: Entering UpdateUser repository function.")
+	zap.S().Debugw("DefaultUserRepository: Attempting to update user", "user", user)
+	// TRACE: calling the DB Save method
+	zap.S().Debug("TRACE: Calling database Save method.")
+	err := r.db.WithContext(ctx).Save(user).Error
+	if err != nil {
+		zap.S().Errorw("DefaultUserRepository: Failed to update user", "userID", user.ID, "error", err)
+	} else {
+		zap.S().Debugw("DefaultUserRepository: Successfully updated user", "userID", user.ID)
+	}
+	// TRACE: exiting the repository update function
+	zap.S().Debug("TRACE: Exiting UpdateUser repository function.")
+	return err
 }
 
 func (r *DefaultUserRepository) DeleteUser(ctx context.Context, id string) error {

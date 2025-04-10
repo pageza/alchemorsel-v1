@@ -2,15 +2,15 @@ package services
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"time"
 
-	"encoding/hex"
-
 	"github.com/google/uuid"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -166,6 +166,9 @@ func (s *UserService) ResetPassword(ctx context.Context, token string, newPasswo
 
 // PatchUser updates specific fields of a user
 func (s *UserService) PatchUser(ctx context.Context, id string, updates map[string]interface{}) error {
+	zap.S().Debug("TRACE: Entering PatchUser service function.")
+	zap.S().Debugw("PatchUser: received patch payload", "id", id, "updates", updates)
+
 	user, err := s.repo.GetUser(ctx, id)
 	if err != nil {
 		return err
@@ -173,30 +176,50 @@ func (s *UserService) PatchUser(ctx context.Context, id string, updates map[stri
 	if user == nil {
 		return fmt.Errorf("user not found")
 	}
+	zap.S().Debugw("PatchUser: original user retrieved", "user", user)
 
+	zap.S().Debug("TRACE: Beginning to update user fields.")
 	// Update fields
 	for field, value := range updates {
+		zap.S().Debugw("PatchUser: updating field", "field", field, "value", value)
 		switch field {
 		case "email":
 			if email, ok := value.(string); ok {
 				user.Email = email
+				zap.S().Debugw("PatchUser: updated email", "email", email)
 			}
 		case "name":
 			if name, ok := value.(string); ok {
 				user.Name = name
+				zap.S().Debugw("PatchUser: updated name", "name", name)
 			}
 		case "password":
 			if password, ok := value.(string); ok {
 				hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 				if err != nil {
+					zap.S().Errorw("PatchUser: error hashing password", "error", err)
 					return err
 				}
 				user.Password = string(hashedPassword)
+				zap.S().Debug("PatchUser: updated password")
 			}
+		default:
+			zap.S().Warnw("PatchUser: unrecognized field, skipping update", "field", field)
 		}
 	}
+	zap.S().Debug("TRACE: Finished updating user fields.")
+	zap.S().Debugw("PatchUser: updated user fields", "user", user)
 
-	return s.repo.UpdateUser(ctx, user)
+	zap.S().Debug("TRACE: Calling repository update from PatchUser service.")
+	if err := s.repo.UpdateUser(ctx, user); err != nil {
+		zap.S().Errorw("PatchUser: repository failed to update user", "userID", user.ID, "error", err)
+		return err
+	}
+	zap.S().Debug("TRACE: Repository update completed in PatchUser service.")
+	zap.S().Debugw("PatchUser: repository updated user successfully", "userID", user.ID)
+
+	zap.S().Debug("TRACE: Exiting PatchUser service function.")
+	return nil
 }
 
 // GetAllUsers retrieves all users

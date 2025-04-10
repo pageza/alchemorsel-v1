@@ -122,7 +122,123 @@
             "me"
           ]
         }
-      }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    var jsonData = pm.response.json();",
+              "    pm.environment.set('userId', jsonData.id);",
+              "    console.log('User ID set from current user:', jsonData.id);",
+              "} else {",
+              "    console.log('Failed to get current user');",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get User By ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/v1/users/{{userId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "users",
+            "{{userId}}"
+          ]
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    var jsonData = pm.response.json();",
+              "    pm.test('User ID matches', function () {",
+              "         pm.expect(jsonData.id).to.eql(pm.environment.get('userId'));",
+              "    });",
+              "    pm.test('User has a name', function () {",
+              "         pm.expect(jsonData.name).not.to.be.empty;",
+              "    });",
+              "    pm.test('User email is valid', function () {",
+              "         pm.expect(jsonData.email).to.include('@');",
+              "    });",
+              "} else {",
+              "    pm.test('Response status code is 200', function() {",
+              "         pm.expect(pm.response.code).to.eql(200);",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Update User",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Updated Name\"}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/users/me",
+          "protocol": "http",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "users",
+            "me"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    var jsonData = pm.response.json();",
+              "    pm.test('User Name is updated', function () {",
+              "         pm.expect(jsonData.name).to.eql('Updated Name');",
+              "    });",
+              "} else {",
+              "    pm.test('Response status code is 200', function() {",
+              "         pm.expect(pm.response.code).to.eql(200);",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
     }
   ]
 } 
