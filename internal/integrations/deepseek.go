@@ -17,7 +17,6 @@ import (
 func GenerateRecipe(query string, attributes map[string]interface{}) (string, error) {
 	deepseekURL := "https://api.deepseek.com/chat/completions"
 	zap.L().Debug("Hardcoded DeepSeek URL for testing", zap.String("value", deepseekURL))
-	apiKey := "sk-c57bd002bf00477ba2e80fd25697df48"
 	zap.L().Debug("Hardcoded API key for testing", zap.String("apiKey", apiKey))
 
 	promptInstructions := "You are a helpful assistant. Create a recipe based on the user's input and profile attributes. Follow the specified prompt instructions."
