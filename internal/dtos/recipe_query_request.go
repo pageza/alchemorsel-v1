@@ -6,6 +6,6 @@ package dtos
 
 type RecipeQueryRequest struct {
 	Query                  string `json:"query" binding:"required"`
-	PromptInstructions     string `json:"prompt_instructions" binding:"required"`
-	ExpectedResponseFormat string `json:"expected_response_format" binding:"required"`
+	PromptInstructions     string `json:"promptInstructions" binding:"required"`
+	ExpectedResponseFormat string `json:"expectedResponseFormat" binding:"required"`
 }

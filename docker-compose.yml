@@ -20,7 +20,7 @@ services:
     command: []
     environment:
       DB_DRIVER: ${DB_DRIVER:-postgres}
-      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-default-model}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-reasoner}
       HOST: ${HOST:-0.0.0.0}
       LLM_ENDPOINT: ${LLM_ENDPOINT:-http://localhost:5000}
       PORT: ${PORT:-8080}
@@ -36,6 +36,8 @@ services:
       - jwt_secret
       - postgres_user
       - postgres_password
+      - deepseek_api_key
+      - deepseek_api_url
 
   postgres:
     image: ankane/pgvector
@@ -76,3 +78,7 @@ secrets:
     file: ./secrets/postgres_user.txt
   postgres_password:
     file: ./secrets/postgres_password.txt
+  deepseek_api_key:
+    file: ./secrets/deepseek_api_key.txt
+  deepseek_api_url:
+    file: ./secrets/deepseek_api_url.txt

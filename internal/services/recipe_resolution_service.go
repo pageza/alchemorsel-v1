@@ -1,16 +1,12 @@
 package services
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"time"
 
-	"github.com/pageza/alchemorsel-v1/internal/dtos"
+	"github.com/pageza/alchemorsel-v1/internal/integrations"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/parsers"
 )
@@ -120,11 +116,21 @@ const (
 )
 
 // BuildCompositePrompt constructs the composite prompt using the user's query and profile details with hardcoded prompt instructions and expected response format.
-func (s *recipeResolutionService) BuildCompositePrompt(query string, _ string, _ string, profile map[string]interface{}) (string, error) {
+func (s *recipeResolutionService) BuildCompositePrompt(query string, promptInstructions string, expectedResponseFormat string, profile map[string]interface{}) (string, error) {
+	// Check if promptInstructions and expectedResponseFormat are provided; if not, use the defaults
+	if promptInstructions == "" {
+		promptInstructions = DefaultPromptInstructions
+		fmt.Println("PromptInstructions missing in request, using default prompt instructions")
+	}
+	if expectedResponseFormat == "" {
+		expectedResponseFormat = DefaultExpectedResponseFormat
+		fmt.Println("ExpectedResponseFormat missing in request, using default expected response format")
+	}
+
 	compositePrompt := "=== Composite Prompt for Recipe Resolution ===\n\n"
 	compositePrompt += "User Query:\n" + query + "\n\n"
-	compositePrompt += "Prompt Instructions:\n" + DefaultPromptInstructions + "\n\n"
-	compositePrompt += "Expected Response Format:\n" + DefaultExpectedResponseFormat + "\n\n"
+	compositePrompt += "Prompt Instructions:\n" + promptInstructions + "\n\n"
+	compositePrompt += "Expected Response Format:\n" + expectedResponseFormat + "\n\n"
 	compositePrompt += "User Profile:\n"
 	for key, value := range profile {
 		compositePrompt += " - " + key + ": " + fmt.Sprintf("%v", value) + "\n"
@@ -134,8 +140,12 @@ func (s *recipeResolutionService) BuildCompositePrompt(query string, _ string, _
 }
 
 func (s *recipeResolutionService) ResolveRecipeByModel(ctx context.Context, compositePrompt string) (string, []string, error) {
-	// TODO: Implement logic to call the external model with the composite prompt.
-	return "", nil, nil
+	response, err := callExternalAPI(compositePrompt)
+	if err != nil {
+		return "", nil, err
+	}
+	// For now, just return the raw response as the candidate and an empty slice for alternatives.
+	return response, []string{}, nil
 }
 
 // ResolveRecipe searches for a matching recipe; if not found, generates one using external APIs.
@@ -143,6 +153,7 @@ func ResolveRecipe(query string, attributes map[string]interface{}) (*models.Rec
 	// Construct a prompt by prefixing the user's request with instructions
 	promptPrefix := "You are a professional chef's assistant to help the chef create dishes using the parameters specified. The expected response format is JSON with the following keys: title (string), description (string), ingredients (array of objects with keys: name, amount, unit), steps (array of objects with keys: order, description), nutritional_info (string), allergy_disclaimer (string), cuisines (array of strings), diets (array of strings), appliances (array of strings), tags (array of strings), images (array of strings), difficulty (string), prep_time (integer), cooking_time (integer), servings (integer), approved (boolean)."
 
+	// Build the prompt
 	attributesJSON, err := json.Marshal(attributes)
 	if err != nil {
 		return nil, nil, err
@@ -152,98 +163,24 @@ func ResolveRecipe(query string, attributes map[string]interface{}) (*models.Rec
 		prompt += "\nTitle: " + query
 	}
 
-	// Simulate sending the prompt to an external API to generate a recipe
-	generatedResponse, err := simulateExternalAPI(prompt)
+	// Call the external API to generate the recipe
+	generatedResponse, err := callExternalAPI(prompt)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Parse the generated response into a RecipeResponse DTO
-	var recipeDTO dtos.RecipeResponse
-	if err := json.Unmarshal([]byte(generatedResponse), &recipeDTO); err != nil {
-		return nil, nil, err
-	}
-
-	// Convert the RecipeResponse DTO to a models.Recipe
+	// Instead of parsing JSON, directly use the raw generated response
 	generatedRecipe := &models.Recipe{
-		Title:             recipeDTO.Title,
-		Description:       recipeDTO.Description,
-		NutritionalInfo:   recipeDTO.NutritionalInfo,
-		AllergyDisclaimer: recipeDTO.AllergyDisclaimer,
-		Difficulty:        recipeDTO.Difficulty,
-		PrepTime:          recipeDTO.PrepTime,
-		CookTime:          recipeDTO.CookTime,
-		Servings:          recipeDTO.Servings,
-		Approved:          recipeDTO.Approved,
-		CreatedAt:         time.Now(),
-		UpdatedAt:         time.Now(),
+		Title:       "Generated Recipe",
+		Description: generatedResponse,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
-	// Convert ingredients and steps to JSON bytes
-	ingredientsBytes, err := json.Marshal(recipeDTO.Ingredients)
-	if err != nil {
-		return nil, nil, err
-	}
-	generatedRecipe.Ingredients = ingredientsBytes
-
-	stepsBytes, err := json.Marshal(recipeDTO.Steps)
-	if err != nil {
-		return nil, nil, err
-	}
-	generatedRecipe.Steps = stepsBytes
-
-	// Simulate calling an embedding service to obtain an embedding
-	generatedRecipe.Embedding = models.Float64Slice{0.1, 0.2, 0.3}
-
-	// For similar recipes, return an empty list
-	similarRecipes := []*models.Recipe{}
-
-	return generatedRecipe, similarRecipes, nil
+	return generatedRecipe, []*models.Recipe{}, nil
 }
 
-// simulateExternalAPI now performs an actual HTTP POST to the Deepseek API
-func simulateExternalAPI(prompt string) (string, error) {
-	deepseekURL := os.Getenv("DEEPSEEK_API_URL")
-	apiKey := os.Getenv("DEEPSEEK_API_KEY")
-	if deepseekURL == "" {
-		return "", fmt.Errorf("DEEPSEEK_API_URL not set")
-	}
-
-	// Build payload with the prompt
-	payloadMap := map[string]string{
-		"prompt": prompt,
-	}
-	payloadBytes, err := json.Marshal(payloadMap)
-	if err != nil {
-		return "", err
-	}
-
-	req, err := http.NewRequest("POST", deepseekURL, bytes.NewBuffer(payloadBytes))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-	}
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	responseBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	// Write the response to a JSON file for easier reading (optional, can be removed in production)
-	err = os.WriteFile("deepseek_response.json", responseBytes, 0644)
-	if err != nil {
-		return "", err
-	}
-
-	return string(responseBytes), nil
+// Consolidate DeepSeek integration: delegate the call to integrations.GenerateRecipe
+func callExternalAPI(prompt string) (string, error) {
+	return integrations.GenerateRecipe(prompt, make(map[string]interface{}))
 }
