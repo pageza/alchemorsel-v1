@@ -4,16 +4,18 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
 	"fmt"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/pageza/alchemorsel-v1/internal/db"
-	"github.com/pageza/alchemorsel-v1/internal/routes" // using the existing routes configuration
+	"github.com/pageza/alchemorsel-v1/internal/repositories"
+	"github.com/pageza/alchemorsel-v1/internal/routes"
 	"github.com/stretchr/testify/assert"
+	"gorm.io/gorm"
 )
 
 // Helper function to create a test user and get a JWT token
@@ -87,20 +89,9 @@ func TestIntegrationListRecipes(t *testing.T) {
 
 // TestIntegrationGetRecipe creates a recipe then retrieves it by ID.
 func TestIntegrationGetRecipe(t *testing.T) {
-	os.Setenv("JWT_SECRET", "testsecret")
-	os.Setenv("DISABLE_RATE_LIMITER", "true")
-	// Initialize the database
-	config := db.NewConfig()
-	database, err := db.InitDB(config)
-	if err != nil {
-		t.Fatalf("Failed to initialize DB: %v", err)
-	}
-
-	// Create test logger
-	logger := createTestLogger()
-
-	// Initialize the router with the database and logger
-	router := routes.SetupRouter(database, logger)
+	// Setup test environment
+	router, database := setupTestEnvironment(t)
+	defer database.Migrator().DropTable(&repositories.Recipe{})
 
 	// Obtain a valid JWT token for authentication
 	token := createTestUserAndGetToken(t, router)
@@ -134,7 +125,7 @@ func TestIntegrationGetRecipe(t *testing.T) {
 		ID    string `json:"id"`
 		Title string `json:"title"`
 	}
-	err = json.Unmarshal(createResp.Body.Bytes(), &created)
+	err := json.Unmarshal(createResp.Body.Bytes(), &created)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, created.ID)
 
@@ -167,21 +158,9 @@ func TestIntegrationGetRecipe(t *testing.T) {
 
 // TestIntegrationSaveRecipe expects the POST endpoint to return a saved recipe with a valid ID.
 func TestIntegrationSaveRecipe(t *testing.T) {
-	// t.Skip("Skipping failing integration test: TestIntegrationSaveRecipe")
-	os.Setenv("JWT_SECRET", "testsecret")
-	os.Setenv("DISABLE_RATE_LIMITER", "true")
-	// Initialize the database
-	config := db.NewConfig()
-	database, err := db.InitDB(config)
-	if err != nil {
-		t.Fatalf("Failed to initialize DB: %v", err)
-	}
-
-	// Create test logger
-	logger := createTestLogger()
-
-	// Initialize the router with the database and logger
-	router := routes.SetupRouter(database, logger)
+	// Setup test environment
+	router, database := setupTestEnvironment(t)
+	defer database.Migrator().DropTable(&repositories.Recipe{})
 
 	reqBody := `{
 		"title": "Integration Created Recipe",
@@ -212,7 +191,7 @@ func TestIntegrationSaveRecipe(t *testing.T) {
 		ID    string `json:"id"`
 		Title string `json:"title"`
 	}
-	err = json.Unmarshal(w.Body.Bytes(), &recipe)
+	err := json.Unmarshal(w.Body.Bytes(), &recipe)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, recipe.ID)
 	assert.Equal(t, "Integration Created Recipe", recipe.Title)
@@ -287,7 +266,7 @@ func TestIntegrationUpdateRecipe(t *testing.T) {
 // 	assert.Empty(t, w.Body.Bytes())
 // }
 
-func TestRecipeEndpoints(t *testing.T) {
+func setupTestEnvironment(t *testing.T) (*gin.Engine, *gorm.DB) {
 	// Initialize the database
 	config := db.NewConfig()
 	database, err := db.InitDB(config)
@@ -295,11 +274,25 @@ func TestRecipeEndpoints(t *testing.T) {
 		t.Fatalf("Failed to initialize DB: %v", err)
 	}
 
-	// Create test logger
-	logger := createTestLogger()
+	// Run migrations
+	if err := repositories.RunMigrations(database); err != nil {
+		t.Fatalf("Failed to run migrations: %v", err)
+	}
 
-	// Initialize the router with the database and logger
-	_ = routes.SetupRouter(database, logger)
+	// Create test logger and Redis client
+	logger := createTestLogger()
+	redisClient := createTestRedisClient()
+
+	// Initialize the router with all dependencies
+	router := routes.SetupRouter(database, logger, redisClient)
+
+	return router, database
+}
+
+func TestRecipeEndpoints(t *testing.T) {
+	// Setup test environment
+	_, database := setupTestEnvironment(t)
+	defer database.Migrator().DropTable(&repositories.Recipe{})
 
 	// ... rest of the test
 }

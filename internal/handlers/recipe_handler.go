@@ -14,14 +14,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/dtos"
+	"github.com/pageza/alchemorsel-v1/internal/repositories"
 )
 
 // RecipeHandler handles HTTP requests for recipe generation
-type RecipeHandler struct{}
+type RecipeHandler struct {
+	redisClient *repositories.RedisClient
+}
 
 // NewRecipeHandler creates a new instance of RecipeHandler
-func NewRecipeHandler() *RecipeHandler {
-	return &RecipeHandler{}
+func NewRecipeHandler(redisClient *repositories.RedisClient) *RecipeHandler {
+	return &RecipeHandler{
+		redisClient: redisClient,
+	}
 }
 
 // DeepSeekResponse represents the response from the DeepSeek API
@@ -39,9 +44,11 @@ type DeepSeekResponse struct {
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
+		PromptTokens      int `json:"prompt_tokens"`
+		CompletionTokens  int `json:"completion_tokens"`
+		TotalTokens       int `json:"total_tokens"`
+		PromptCacheHits   int `json:"prompt_cache_hit_tokens"`
+		PromptCacheMisses int `json:"prompt_cache_miss_tokens"`
 	} `json:"usage"`
 }
 
@@ -310,6 +317,18 @@ func (h *RecipeHandler) GenerateRecipe(c *gin.Context) {
 			return
 		}
 
+		// Log detailed usage statistics
+		log.Printf("DeepSeek API Usage Statistics:")
+		log.Printf("  - Total Tokens: %d", deepseekResp.Usage.TotalTokens)
+		log.Printf("  - Prompt Tokens: %d", deepseekResp.Usage.PromptTokens)
+		log.Printf("  - Completion Tokens: %d", deepseekResp.Usage.CompletionTokens)
+		log.Printf("  - Cache Hit Tokens: %d", deepseekResp.Usage.PromptCacheHits)
+		log.Printf("  - Cache Miss Tokens: %d", deepseekResp.Usage.PromptCacheMisses)
+		if deepseekResp.Usage.PromptCacheHits > 0 {
+			hitPercentage := float64(deepseekResp.Usage.PromptCacheHits) / float64(deepseekResp.Usage.PromptTokens) * 100
+			log.Printf("  - Cache Hit Rate: %.2f%%", hitPercentage)
+		}
+
 		// Check if there are any choices in the response
 		if len(deepseekResp.Choices) == 0 {
 			log.Printf("DeepSeek API returned no choices")
@@ -321,7 +340,7 @@ func (h *RecipeHandler) GenerateRecipe(c *gin.Context) {
 		}
 
 		// Parse the recipe JSON string into our Recipe struct
-		var recipe Recipe
+		var recipe repositories.Recipe
 		if err := json.Unmarshal([]byte(deepseekResp.Choices[0].Message.Content), &recipe); err != nil {
 			log.Printf("Failed to parse recipe JSON: %v", err)
 			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
@@ -331,15 +350,37 @@ func (h *RecipeHandler) GenerateRecipe(c *gin.Context) {
 			return
 		}
 
-		log.Printf("Successfully generated recipe, returning response")
-		// Return the parsed recipe object
+		log.Printf("Attempting to cache recipe in Redis - Title: %s", recipe.Title)
+		// Cache the recipe in Redis
+		tempID, err := h.redisClient.CacheRecipe(c.Request.Context(), recipe)
+		if err != nil {
+			log.Printf("Failed to cache recipe in Redis: %v", err)
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "INTERNAL_ERROR",
+				Message: fmt.Sprintf("Failed to cache recipe: %v", err),
+			})
+			return
+		}
+
+		// Verify the recipe was cached by attempting to retrieve it
+		log.Printf("Verifying recipe cache - Attempting to retrieve recipe with ID: %s", tempID)
+		cachedRecipe, err := h.redisClient.GetRecipe(c.Request.Context(), tempID)
+		if err != nil {
+			log.Printf("Warning: Could not verify recipe cache - retrieval failed: %v", err)
+		} else {
+			log.Printf("Successfully verified recipe cache - Recipe found in Redis with ID: %s", tempID)
+			log.Printf("Cache details - Original Title: %s, Modification Count: %d",
+				cachedRecipe.Original.Title,
+				cachedRecipe.ModificationCount)
+		}
+
+		log.Printf("Successfully generated and cached recipe with ID: %s", tempID)
+		// Return the parsed recipe object and temp ID
 		c.JSON(http.StatusOK, gin.H{
-			"recipe": recipe,
-			"usage": gin.H{
-				"prompt_tokens":     deepseekResp.Usage.PromptTokens,
-				"completion_tokens": deepseekResp.Usage.CompletionTokens,
-				"total_tokens":      deepseekResp.Usage.TotalTokens,
-			},
+			"recipe_id":    tempID,
+			"recipe":       recipe,
+			"status":       "cached_for_approval",
+			"cache_expiry": "1 hour",
 		})
 
 	case err := <-errChannel:

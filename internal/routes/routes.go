@@ -15,7 +15,7 @@ import (
 )
 
 // SetupRouter initializes and returns the Gin router with all routes configured
-func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
+func SetupRouter(db *gorm.DB, logger *logging.Logger, redisClient *repositories.RedisClient) *gin.Engine {
 	logger.Info("Starting router setup...")
 
 	// For integration tests, ensure we use the Postgres test database.
@@ -80,7 +80,7 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
 
 		// Initialize handlers
 		userHandler := handlers.NewUserHandler(userService)
-		recipeHandler := handlers.NewRecipeHandler()
+		recipeHandler := handlers.NewRecipeHandler(redisClient)
 
 		// Only add the rate limiter if DISABLE_RATE_LIMITER is not set to "true".
 		if os.Getenv("DISABLE_RATE_LIMITER") != "true" {

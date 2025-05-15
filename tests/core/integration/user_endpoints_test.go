@@ -12,13 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/db"
-	"github.com/pageza/alchemorsel-v1/internal/handlers"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
-	"github.com/pageza/alchemorsel-v1/internal/services"
 	"gorm.io/gorm"
 )
 
@@ -57,60 +54,23 @@ func TestIntegrationUser(t *testing.T) {
 		t.Fatalf("Failed to initialize DB: %v", err)
 	}
 
-	// Create test logger
+	// Create test logger and Redis client
 	logger := createTestLogger()
+	redisClient := createTestRedisClient()
 
-	// Initialize the router with the database and logger
-	_ = routes.SetupRouter(database, logger)
+	// Initialize the router with the database, logger, and Redis client
+	_ = routes.SetupRouter(database, logger, redisClient)
 
 	// ... rest of test
 }
 
-func setupTestDB(t *testing.T) (*gin.Engine, *gorm.DB) {
-	// Set environment variables for test
-	os.Setenv("DB_DRIVER", "postgres")
-	os.Setenv("TEST_MODE", "true")
-	os.Setenv("DISABLE_RATE_LIMITER", "true")
-	// Note: The host and port are set by TestMain
-	os.Setenv("POSTGRES_USER", "postgres")
-	os.Setenv("POSTGRES_PASSWORD", "testpass")
-	os.Setenv("POSTGRES_DB", "testdb")
-	os.Setenv("JWT_SECRET", "testsecret")
-
-	// Initialize the database
-	config := db.NewConfig()
-	database, err := db.InitDB(config)
-	if err != nil {
-		t.Fatalf("Failed to initialize DB: %v", err)
-	}
-
-	// Run migrations
-	if err := repositories.RunMigrations(database); err != nil {
-		t.Fatalf("Failed to run migrations: %v", err)
-	}
-
-	// Set Gin to test mode
-	gin.SetMode(gin.TestMode)
-
-	// Create a new Gin engine
-	router := gin.New()
-	router.Use(gin.Recovery())
-
-	// Create user repository and service
-	userRepo := repositories.NewUserRepository(database)
-	userService := services.NewUserService(userRepo)
-	userHandler := handlers.NewUserHandler(userService)
-
-	// Register user endpoints
-	router.POST("/v1/users", userHandler.CreateUser)
-	router.GET("/v1/users/:id", userHandler.GetUser)
-	router.POST("/v1/users/login", userHandler.LoginUser)
-
-	return router, database
-}
-
 func TestUserEndpoints(t *testing.T) {
-	router, database := setupTestDB(t)
+	os.Setenv("JWT_SECRET", "testsecret")
+	os.Setenv("DISABLE_RATE_LIMITER", "true")
+
+	// Setup test environment
+	router, database := setupTestEnvironment(t)
+	defer database.Migrator().DropTable(&models.User{})
 
 	t.Run("CreateUser_Success", func(t *testing.T) {
 		resetDB(t, database)
@@ -252,11 +212,12 @@ func TestAdditionalUserEndpoints(t *testing.T) {
 		t.Fatalf("Failed to initialize DB: %v", err)
 	}
 
-	// Create test logger
+	// Create test logger and Redis client
 	logger := createTestLogger()
+	redisClient := createTestRedisClient()
 
-	// Initialize the router with the database and logger
-	_ = routes.SetupRouter(database, logger)
+	// Initialize the router with the database, logger, and Redis client
+	_ = routes.SetupRouter(database, logger, redisClient)
 
 	// ... rest of test
 }

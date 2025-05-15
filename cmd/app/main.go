@@ -9,6 +9,7 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/logging"
 	"github.com/pageza/alchemorsel-v1/internal/migrations"
+	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -87,10 +88,14 @@ func main() {
 	}
 	logger.Info("Migrations completed")
 
-	// Setup and start the Gin router with database dependency
-	logger.Info("Setting up router...")
-	router := routes.SetupRouter(database, logger)
-	logger.Info("Router setup complete")
+	// Initialize Redis client
+	redisClient, err := repositories.NewRedisClient("redis:6379")
+	if err != nil {
+		log.Fatalf("Failed to initialize Redis client: %v", err)
+	}
+
+	// Setup router with Redis client
+	router := routes.SetupRouter(database, logger, redisClient)
 
 	logger.Info("Starting server", zap.String("address", "0.0.0.0:8080"))
 	logger.Debug("Server configuration",
