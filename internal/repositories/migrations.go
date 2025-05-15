@@ -75,9 +75,6 @@ func AutoMigrate() error {
 
 	return DB.WithContext(context.Background()).AutoMigrate(
 		&models.User{},
-		&models.Recipe{},
-		&models.Tag{},
-		&models.Appliance{},
 	)
 }
 
@@ -119,6 +116,5 @@ func RunMigrations(db *gorm.DB) error {
 
 	return db.AutoMigrate(
 		&models.User{},
-		&models.Recipe{},
 	)
 }

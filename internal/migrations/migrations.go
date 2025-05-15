@@ -76,7 +76,6 @@ func RunMigrations(db *gorm.DB) error {
 	// Run GORM auto-migrations for any new models
 	return db.AutoMigrate(
 		&models.User{},
-		&models.Recipe{},
 	)
 }
 

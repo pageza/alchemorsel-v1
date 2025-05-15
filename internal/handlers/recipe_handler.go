@@ -1,501 +1,361 @@
 package handlers
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
-	"strconv"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/dtos"
-	"github.com/pageza/alchemorsel-v1/internal/models"
-	"github.com/pageza/alchemorsel-v1/internal/services"
-	"github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 )
 
-// RecipeHandler handles recipe-related HTTP requests with dependency injection.
-type RecipeHandler struct {
-	Service services.RecipeService
+// RecipeHandler handles HTTP requests for recipe generation
+type RecipeHandler struct{}
+
+// NewRecipeHandler creates a new instance of RecipeHandler
+func NewRecipeHandler() *RecipeHandler {
+	return &RecipeHandler{}
 }
 
-// NewRecipeHandler creates a new RecipeHandler with the given service.
-func NewRecipeHandler(service services.RecipeService) *RecipeHandler {
-	return &RecipeHandler{Service: service}
+// DeepSeekResponse represents the response from the DeepSeek API
+type DeepSeekResponse struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Index   int `json:"index"`
+		Message struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"message"`
+		FinishReason string `json:"finish_reason"`
+	} `json:"choices"`
+	Usage struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage"`
 }
 
-// @Summary List all recipes
-// @Description Get a list of all recipes
-// @Tags recipes
-// @Accept json
-// @Produce json
-// @Success 200 {object} dtos.RecipeListResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /v1/recipes [get]
-func (h *RecipeHandler) ListRecipes(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-	sort := c.DefaultQuery("sort", "created_at")
-	order := c.DefaultQuery("order", "desc")
+// Add the Recipe struct after the DeepSeekResponse struct
+type Recipe struct {
+	Title            string        `json:"title"`
+	Description      string        `json:"description"`
+	Servings         int           `json:"servings"`
+	PrepTimeMinutes  int           `json:"prep_time_minutes"`
+	CookTimeMinutes  int           `json:"cook_time_minutes"`
+	TotalTimeMinutes int           `json:"total_time_minutes"`
+	Ingredients      []Ingredient  `json:"ingredients"`
+	Instructions     []Instruction `json:"instructions"`
+	Nutrition        Nutrition     `json:"nutrition"`
+	Tags             []string      `json:"tags"`
+	Difficulty       string        `json:"difficulty"`
+}
 
-	recipes, err := h.Service.ListRecipes(c.Request.Context(), page, limit, sort, order)
+type Ingredient struct {
+	Item   string      `json:"item"`
+	Amount json.Number `json:"amount"`
+	Unit   string      `json:"unit"`
+}
+
+type Instruction struct {
+	Step        int    `json:"step"`
+	Description string `json:"description"`
+}
+
+type Nutrition struct {
+	Calories int    `json:"calories"`
+	Protein  string `json:"protein"`
+	Carbs    string `json:"carbs"`
+	Fat      string `json:"fat"`
+}
+
+// readSecretFile reads a secret from the Docker secrets directory
+func readSecretFile(secretName string) (string, error) {
+	log.Printf("Attempting to read secret: %s", secretName)
+
+	// Try Docker secrets path first
+	dockerPath := "/run/secrets/" + secretName
+	log.Printf("Checking Docker secrets path: %s", dockerPath)
+	data, err := os.ReadFile(dockerPath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: err.Error()})
-		return
+		log.Printf("Could not read from Docker secrets path: %v", err)
+
+		// Fall back to local secrets directory
+		localPath := "./secrets/" + secretName + ".txt"
+		log.Printf("Falling back to local path: %s", localPath)
+		data, err = os.ReadFile(localPath)
+		if err != nil {
+			log.Printf("Failed to read secret from local path: %v", err)
+			return "", fmt.Errorf("failed to read secret %s: %v", secretName, err)
+		}
+		log.Printf("Successfully read secret from local path")
+	} else {
+		log.Printf("Successfully read secret from Docker secrets path")
 	}
 
-	// Convert to response DTOs
-	var response dtos.RecipeListResponse
-	response.Recipes = make([]dtos.RecipeResponse, len(recipes))
-	for i, recipe := range recipes {
-		response.Recipes[i] = *dtos.NewRecipeResponse(&recipe)
-	}
-
-	c.JSON(http.StatusOK, response)
+	return string(bytes.TrimSpace(data)), nil
 }
 
-// @Summary Get a recipe by ID
-// @Description Get a recipe by its unique ID
-// @Tags recipes
-// @Accept json
-// @Produce json
-// @Param id path string true "Recipe ID"
-// @Success 200 {object} models.Recipe
-// @Failure 400 {object} ErrorResponse
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /v1/recipes/{id} [get]
-func (h *RecipeHandler) GetRecipe(c *gin.Context) {
-	id := c.Param("id")
-	recipe, err := h.Service.GetRecipe(c.Request.Context(), id)
-	if err != nil {
-		c.JSON(http.StatusNotFound, dtos.ErrorResponse{Code: "NOT_FOUND", Message: "Recipe not found"})
-		return
-	}
-	response := dtos.NewRecipeResponse(recipe)
-	c.JSON(http.StatusOK, response)
-}
+// GenerateRecipe handles the request to generate a recipe
+func (h *RecipeHandler) GenerateRecipe(c *gin.Context) {
+	log.Printf("Received recipe generation request")
 
-// @Summary Create a new recipe
-// @Description Create a new recipe with the provided details
-// @Tags recipes
-// @Accept json
-// @Produce json
-// @Param recipe body dtos.RecipeRequest true "Recipe details"
-// @Success 201 {object} dtos.RecipeResponse
-// @Failure 400 {object} dtos.ErrorResponse
-// @Failure 401 {object} dtos.ErrorResponse
-// @Router /v1/recipes [post]
-func (h *RecipeHandler) SaveRecipe(c *gin.Context) {
-	var recipeReq dtos.RecipeRequest
-	if err := c.ShouldBindJSON(&recipeReq); err != nil {
-		logrus.WithError(err).Error("Failed to bind JSON request")
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Invalid request body: " + err.Error()})
-		return
+	var req struct {
+		Query string `json:"query" binding:"required"`
 	}
 
-	// Collect validation errors
-	var validationErrors []string
-	if recipeReq.Title == "" {
-		validationErrors = append(validationErrors, "Title is required")
-	}
-	if len(recipeReq.Ingredients) == 0 {
-		validationErrors = append(validationErrors, "At least one ingredient is required")
-	}
-	if len(recipeReq.Steps) == 0 {
-		validationErrors = append(validationErrors, "At least one step is required")
-	}
-
-	// Validate ingredients
-	for i, ing := range recipeReq.Ingredients {
-		if ing.Name == "" || ing.Amount == "" || ing.Unit == "" {
-			validationErrors = append(validationErrors, fmt.Sprintf("Invalid ingredient at index %d: name, amount, and unit are required", i))
-		}
-	}
-
-	// Validate steps
-	for i, step := range recipeReq.Steps {
-		if step.Description == "" {
-			validationErrors = append(validationErrors, fmt.Sprintf("Invalid step at index %d: description is required", i))
-		}
-	}
-
-	// If there are validation errors, return them all at once
-	if len(validationErrors) > 0 {
-		logrus.WithField("errors", validationErrors).Error("Validation failed")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("Invalid request body: %v", err)
 		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
 			Code:    "BAD_REQUEST",
-			Message: strings.Join(validationErrors, "; "),
+			Message: "Invalid request body: query field is required",
 		})
 		return
 	}
 
-	// Create recipe model
-	recipe := &models.Recipe{
-		Title:             recipeReq.Title,
-		Description:       recipeReq.Description,
-		NutritionalInfo:   recipeReq.NutritionalInfo,
-		AllergyDisclaimer: recipeReq.AllergyDisclaimer,
-		Difficulty:        recipeReq.Difficulty,
-		PrepTime:          recipeReq.PrepTime,
-		CookTime:          recipeReq.CookTime,
-		Servings:          recipeReq.Servings,
-		Approved:          recipeReq.Approved,
+	log.Printf("Processing query: %s", req.Query)
+
+	// Build the DeepSeek payload
+	payload := map[string]interface{}{
+		"model": "deepseek-chat",
+		"messages": []map[string]string{
+			{
+				"role": "system",
+				"content": `You are a recipe generation assistant that always responds in JSON format. Format your responses as valid JSON objects with the following structure:
+{
+  "title": "Recipe Name",
+  "description": "Brief description",
+  "servings": 4,
+  "prep_time_minutes": 15,
+  "cook_time_minutes": 30,
+  "total_time_minutes": 45,
+  "ingredients": [
+    {
+      "item": "ingredient name",
+      "amount": 2,
+      "unit": "cups"
+    }
+  ],
+  "instructions": [
+    {
+      "step": 1,
+      "description": "Step description"
+    }
+  ],
+  "nutrition": {
+    "calories": 300,
+    "protein": "10g",
+    "carbs": "45g",
+    "fat": "12g"
+  },
+  "tags": ["vegetarian", "easy", "quick"],
+  "difficulty": "easy"
+}`,
+			},
+			{
+				"role":    "user",
+				"content": fmt.Sprintf("Generate a recipe in JSON format for: %s", req.Query),
+			},
+		},
+		"temperature": 0.7,
+		"max_tokens":  2048,
+		"response_format": map[string]string{
+			"type": "json_object",
+		},
 	}
 
-	// Convert ingredients
-	ingredients := make([]models.Ingredient, len(recipeReq.Ingredients))
-	for i, ing := range recipeReq.Ingredients {
-		ingredients[i] = models.Ingredient{
-			Name:   ing.Name,
-			Amount: ing.Amount,
-			Unit:   ing.Unit,
-		}
-	}
-	if err := recipe.SetIngredients(ingredients); err != nil {
-		logrus.WithError(err).Error("Failed to set ingredients")
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Failed to set ingredients: " + err.Error()})
-		return
-	}
-
-	// Convert steps
-	steps := make([]models.Step, len(recipeReq.Steps))
-	for i, step := range recipeReq.Steps {
-		steps[i] = models.Step{
-			Order:       step.Order,
-			Description: step.Description,
-		}
-	}
-	if err := recipe.SetSteps(steps); err != nil {
-		logrus.WithError(err).Error("Failed to set steps")
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Failed to set steps: " + err.Error()})
-		return
-	}
-
-	// Convert string arrays to models
-	for _, name := range recipeReq.Cuisines {
-		recipe.Cuisines = append(recipe.Cuisines, models.Cuisine{Name: name})
-	}
-	for _, name := range recipeReq.Diets {
-		recipe.Diets = append(recipe.Diets, models.Diet{Name: name})
-	}
-	for _, name := range recipeReq.Appliances {
-		recipe.Appliances = append(recipe.Appliances, models.Appliance{Name: name})
-	}
-	for _, name := range recipeReq.Tags {
-		recipe.Tags = append(recipe.Tags, models.Tag{Name: name})
-	}
-
-	// Save recipe
-	if err := h.Service.SaveRecipe(c.Request.Context(), recipe); err != nil {
-		logrus.WithError(err).Error("Failed to save recipe")
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to save recipe: " + err.Error()})
-		return
-	}
-
-	// Return created recipe
-	response := dtos.NewRecipeResponse(recipe)
-	c.JSON(http.StatusCreated, response)
-}
-
-// @Summary Update a recipe
-// @Description Update an existing recipe with the provided details
-// @Tags recipes
-// @Accept json
-// @Produce json
-// @Param id path string true "Recipe ID"
-// @Param recipe body dtos.RecipeRequest true "Recipe details"
-// @Success 200 {object} dtos.RecipeResponse
-// @Failure 400 {object} dtos.ErrorResponse
-// @Failure 401 {object} dtos.ErrorResponse
-// @Failure 404 {object} dtos.ErrorResponse
-// @Router /v1/recipes/{id} [put]
-func (h *RecipeHandler) UpdateRecipe(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Recipe ID is required"})
-		return
-	}
-
-	var recipeReq dtos.RecipeRequest
-	if err := c.ShouldBindJSON(&recipeReq); err != nil {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: err.Error()})
-		return
-	}
-
-	// Get existing recipe
-	recipe, err := h.Service.GetRecipe(c.Request.Context(), id)
+	// Convert payload to JSON
+	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Code: "NOT_FOUND", Message: "Recipe not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: err.Error()})
+		log.Printf("Failed to marshal payload: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: fmt.Sprintf("Failed to marshal payload: %v", err),
+		})
 		return
 	}
 
-	// Update recipe fields
-	recipe.Title = recipeReq.Title
-	recipe.Description = recipeReq.Description
-	recipe.NutritionalInfo = recipeReq.NutritionalInfo
-	recipe.AllergyDisclaimer = recipeReq.AllergyDisclaimer
-	recipe.Difficulty = recipeReq.Difficulty
-	recipe.PrepTime = recipeReq.PrepTime
-	recipe.CookTime = recipeReq.CookTime
-	recipe.Servings = recipeReq.Servings
-	recipe.Approved = recipeReq.Approved
-
-	// Convert and validate ingredients
-	ingredients := make([]models.Ingredient, len(recipeReq.Ingredients))
-	for i, ing := range recipeReq.Ingredients {
-		if ing.Name == "" || ing.Amount == "" || ing.Unit == "" {
-			c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Invalid ingredient: name, amount, and unit are required"})
-			return
-		}
-		ingredients[i] = models.Ingredient{
-			Name:   ing.Name,
-			Amount: ing.Amount,
-			Unit:   ing.Unit,
-		}
-	}
-	if err := recipe.SetIngredients(ingredients); err != nil {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Failed to set ingredients: " + err.Error()})
-		return
-	}
-
-	// Convert and validate steps
-	steps := make([]models.Step, len(recipeReq.Steps))
-	for i, step := range recipeReq.Steps {
-		if step.Description == "" {
-			c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Invalid step: description is required"})
-			return
-		}
-		steps[i] = models.Step{
-			Order:       step.Order,
-			Description: step.Description,
-		}
-	}
-	if err := recipe.SetSteps(steps); err != nil {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Failed to set steps: " + err.Error()})
-		return
-	}
-
-	// Convert string arrays to models
-	recipe.Cuisines = nil
-	recipe.Diets = nil
-	recipe.Appliances = nil
-	recipe.Tags = nil
-
-	for _, name := range recipeReq.Cuisines {
-		recipe.Cuisines = append(recipe.Cuisines, models.Cuisine{Name: name})
-	}
-	for _, name := range recipeReq.Diets {
-		recipe.Diets = append(recipe.Diets, models.Diet{Name: name})
-	}
-	for _, name := range recipeReq.Appliances {
-		recipe.Appliances = append(recipe.Appliances, models.Appliance{Name: name})
-	}
-	for _, name := range recipeReq.Tags {
-		recipe.Tags = append(recipe.Tags, models.Tag{Name: name})
-	}
-
-	// Update recipe
-	if err := h.Service.UpdateRecipe(c.Request.Context(), recipe); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Code: "NOT_FOUND", Message: "Recipe not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: err.Error()})
-		return
-	}
-
-	// Convert to response DTO
-	response := dtos.NewRecipeResponse(recipe)
-	c.JSON(http.StatusOK, response)
-}
-
-// @Summary Delete a recipe
-// @Description Delete a recipe by its ID
-// @Tags recipes
-// @Accept json
-// @Produce json
-// @Param id path string true "Recipe ID"
-// @Success 204 "No Content"
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /v1/recipes/{id} [delete]
-func (h *RecipeHandler) DeleteRecipe(c *gin.Context) {
-	id := c.Param("id")
-	if err := h.Service.DeleteRecipe(c.Request.Context(), id); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Code: "NOT_FOUND", Message: "Recipe not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to delete recipe: " + err.Error()})
-		return
-	}
-	c.Status(http.StatusNoContent)
-}
-
-// @Summary Resolve a recipe
-// @Description Resolve a recipe based on a query and attributes
-// @Tags recipes
-// @Accept json
-// @Produce json
-// @Param request body ResolveRecipeRequest true "Resolve recipe request"
-// @Success 200 {object} ResolveRecipeResponse
-// @Failure 400 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /v1/recipes/resolve [post]
-func (h *RecipeHandler) ResolveRecipe(c *gin.Context) {
-	var req ResolveRecipeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: err.Error()})
-		return
-	}
-
-	resolved, similar, err := h.Service.ResolveRecipe(c.Request.Context(), req.Query, req.Attributes)
+	// Get API key from Docker secrets
+	log.Printf("Retrieving DeepSeek API key")
+	apiKey, err := readSecretFile("deepseek_api_key")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to resolve recipe: " + err.Error()})
+		log.Printf("Failed to read DeepSeek API key: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: fmt.Sprintf("Failed to read DeepSeek API key: %v", err),
+		})
+		return
+	}
+	log.Printf("Successfully retrieved DeepSeek API key (length: %d)", len(apiKey))
+
+	// Get API URL from Docker secrets
+	log.Printf("Retrieving DeepSeek API URL")
+	apiURL, err := readSecretFile("deepseek_api_url")
+	if err != nil {
+		log.Printf("Failed to read DeepSeek API URL: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: fmt.Sprintf("Failed to read DeepSeek API URL: %v", err),
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, ResolveRecipeResponse{
-		Resolved: resolved,
-		Similar:  similar,
-	})
-}
+	// Clean up the API URL
+	apiURL = strings.TrimSpace(apiURL)
+	log.Printf("Successfully retrieved DeepSeek API URL: %s", apiURL)
 
-// RateRecipe handles rating a recipe.
-// @Summary Rate a recipe
-// @Description Add a rating to a recipe
-// @Tags recipes
-// @Accept json
-// @Produce json
-// @Param id path string true "Recipe ID"
-// @Param rating body float64 true "Rating value"
-// @Success 200 {object} dtos.RecipeResponse
-// @Failure 400 {object} dtos.ErrorResponse
-// @Failure 401 {object} dtos.ErrorResponse
-// @Failure 404 {object} dtos.ErrorResponse
-// @Router /v1/recipes/{id}/rate [post]
-func (h *RecipeHandler) RateRecipe(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Recipe ID is required"})
+	// Ensure the API URL ends with /chat/completions
+	if !bytes.HasSuffix([]byte(apiURL), []byte("/chat/completions")) {
+		apiURL = apiURL + "/chat/completions"
+		log.Printf("Appended /chat/completions to API URL: %s", apiURL)
+	}
+
+	// Create HTTP client with increased timeout (90 seconds instead of 30)
+	client := &http.Client{
+		Timeout: 90 * time.Second,
+	}
+
+	// Create context with timeout for better cancellation handling
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 90*time.Second)
+	defer cancel()
+
+	// Create request with context
+	log.Printf("Creating HTTP request to: %s", apiURL)
+	req2, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		log.Printf("Failed to create request: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: fmt.Sprintf("Failed to create request: %v", err),
+		})
 		return
 	}
 
-	var rating float64
-	if err := c.ShouldBindJSON(&rating); err != nil {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Invalid rating value"})
-		return
-	}
+	// Set headers
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	req2.Header.Set("Accept", "application/json")
+	log.Printf("Set request headers")
 
-	if rating < 0 || rating > 5 {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Rating must be between 0 and 5"})
-		return
-	}
+	// Make request
+	log.Printf("Sending request to DeepSeek API")
+	resp, err := client.Do(req2)
+	if err != nil {
+		log.Printf("Failed to make request to DeepSeek API: %v", err)
 
-	if err := h.Service.RateRecipe(c.Request.Context(), id, rating); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Code: "NOT_FOUND", Message: "Recipe not found"})
+		// Handle timeout errors specifically
+		if os.IsTimeout(err) || strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline exceeded") {
+			c.JSON(http.StatusGatewayTimeout, dtos.ErrorResponse{
+				Code:    "TIMEOUT_ERROR",
+				Message: "The request to DeepSeek API timed out. Please try again later or with a simpler query.",
+			})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: "Failed to rate recipe: " + err.Error()})
+
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: fmt.Sprintf("Failed to make request to DeepSeek API: %v", err),
+		})
 		return
 	}
+	defer resp.Body.Close()
+	log.Printf("Received response with status code: %d", resp.StatusCode)
 
-	// Get updated recipe
-	recipe, err := h.Service.GetRecipe(c.Request.Context(), id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: err.Error()})
-		return
-	}
+	// Read response body with a timeout context
+	bodyChannel := make(chan []byte, 1)
+	errChannel := make(chan error, 1)
 
-	response := dtos.NewRecipeResponse(recipe)
-	c.JSON(http.StatusOK, response)
-}
-
-// GetRecipeRatings handles retrieving ratings for a recipe.
-// @Summary Get recipe ratings
-// @Description Get all ratings for a recipe
-// @Tags recipes
-// @Accept json
-// @Produce json
-// @Param id path string true "Recipe ID"
-// @Success 200 {array} float64
-// @Failure 400 {object} dtos.ErrorResponse
-// @Failure 401 {object} dtos.ErrorResponse
-// @Failure 404 {object} dtos.ErrorResponse
-// @Router /v1/recipes/{id}/ratings [get]
-func (h *RecipeHandler) GetRecipeRatings(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{Code: "BAD_REQUEST", Message: "Recipe ID is required"})
-		return
-	}
-
-	ratings, err := h.Service.GetRecipeRatings(c.Request.Context(), id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, dtos.ErrorResponse{Code: "NOT_FOUND", Message: "Recipe not found"})
+	go func() {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			errChannel <- err
 			return
 		}
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: err.Error()})
+		bodyChannel <- body
+	}()
+
+	// Wait for either the body to be read or a timeout
+	select {
+	case body := <-bodyChannel:
+		// Process the response body
+
+		// Check response status code
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("DeepSeek API returned error status code %d: %s", resp.StatusCode, string(body))
+			c.JSON(resp.StatusCode, dtos.ErrorResponse{
+				Code:    "DEEPSEEK_API_ERROR",
+				Message: fmt.Sprintf("DeepSeek API returned error: %s", string(body)),
+			})
+			return
+		}
+
+		// Parse response
+		log.Printf("Parsing DeepSeek API response")
+		var deepseekResp DeepSeekResponse
+		if err := json.Unmarshal(body, &deepseekResp); err != nil {
+			log.Printf("Failed to parse DeepSeek response: %v", err)
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "INTERNAL_ERROR",
+				Message: fmt.Sprintf("Failed to parse DeepSeek response: %v", err),
+			})
+			return
+		}
+
+		// Check if there are any choices in the response
+		if len(deepseekResp.Choices) == 0 {
+			log.Printf("DeepSeek API returned no choices")
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "INTERNAL_ERROR",
+				Message: "DeepSeek API returned no choices",
+			})
+			return
+		}
+
+		// Parse the recipe JSON string into our Recipe struct
+		var recipe Recipe
+		if err := json.Unmarshal([]byte(deepseekResp.Choices[0].Message.Content), &recipe); err != nil {
+			log.Printf("Failed to parse recipe JSON: %v", err)
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "INTERNAL_ERROR",
+				Message: fmt.Sprintf("Failed to parse recipe JSON: %v", err),
+			})
+			return
+		}
+
+		log.Printf("Successfully generated recipe, returning response")
+		// Return the parsed recipe object
+		c.JSON(http.StatusOK, gin.H{
+			"recipe": recipe,
+			"usage": gin.H{
+				"prompt_tokens":     deepseekResp.Usage.PromptTokens,
+				"completion_tokens": deepseekResp.Usage.CompletionTokens,
+				"total_tokens":      deepseekResp.Usage.TotalTokens,
+			},
+		})
+
+	case err := <-errChannel:
+		log.Printf("Failed to read response body: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: fmt.Sprintf("Failed to read response body: %v", err),
+		})
+		return
+
+	case <-ctx.Done():
+		log.Printf("Context deadline exceeded while reading response body")
+		c.JSON(http.StatusGatewayTimeout, dtos.ErrorResponse{
+			Code:    "TIMEOUT_ERROR",
+			Message: "Timeout while reading response from DeepSeek API. Please try again later or with a simpler query.",
+		})
 		return
 	}
-
-	c.JSON(http.StatusOK, ratings)
-}
-
-// SearchRecipes handles searching for recipes.
-// @Summary Search recipes
-// @Description Search for recipes based on query parameters
-// @Tags recipes
-// @Accept json
-// @Produce json
-// @Param q query string false "Search query"
-// @Param tags query []string false "Filter by tags"
-// @Param difficulty query string false "Filter by difficulty"
-// @Success 200 {object} dtos.RecipeListResponse
-// @Failure 400 {object} dtos.ErrorResponse
-// @Failure 401 {object} dtos.ErrorResponse
-// @Router /v1/recipes/search [get]
-func (h *RecipeHandler) SearchRecipes(c *gin.Context) {
-	query := c.Query("q")
-	tags := c.QueryArray("tags")
-	difficulty := c.Query("difficulty")
-
-	recipes, err := h.Service.SearchRecipes(c.Request.Context(), query, tags, difficulty)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{Code: "INTERNAL_ERROR", Message: err.Error()})
-		return
-	}
-
-	// Convert to response DTOs
-	var response dtos.RecipeListResponse
-	response.Recipes = make([]dtos.RecipeResponse, len(recipes))
-	for i, recipe := range recipes {
-		response.Recipes[i] = *dtos.NewRecipeResponse(&recipe)
-	}
-
-	c.JSON(http.StatusOK, response)
-}
-
-// ResolveRecipeRequest represents the request body for recipe resolution
-type ResolveRecipeRequest struct {
-	Query      string                 `json:"query" binding:"required"`
-	Attributes map[string]interface{} `json:"attributes"`
-}
-
-// ResolveRecipeResponse represents the response for recipe resolution
-type ResolveRecipeResponse struct {
-	Resolved *models.Recipe   `json:"resolved"`
-	Similar  []*models.Recipe `json:"similar"`
-}
-
-// ErrorResponse represents a standard error response
-type ErrorResponse struct {
-	Error string `json:"error"`
 }

@@ -74,27 +74,13 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
 	{
 		// Initialize repositories
 		userRepo := repositories.NewUserRepository(db)
-		recipeRepo := repositories.NewRecipeRepository(db)
-		cuisineRepo := repositories.NewCuisineRepository(db)
-		dietRepo := repositories.NewDietRepository(db)
-		applianceRepo := repositories.NewApplianceRepository(db)
-		tagRepo := repositories.NewTagRepository(db)
 
 		// Initialize services
 		userService := services.NewUserService(userRepo)
-		cuisineService := services.NewCuisineService(cuisineRepo)
-		dietService := services.NewDietService(dietRepo)
-		applianceService := services.NewApplianceService(applianceRepo)
-		tagService := services.NewTagService(tagRepo)
-		recipeService := services.NewRecipeService(recipeRepo, cuisineService, dietService, applianceService, tagService)
 
 		// Initialize handlers
 		userHandler := handlers.NewUserHandler(userService)
-		recipeHandler := handlers.NewRecipeHandler(recipeService)
-		recipeResolutionHandler := handlers.NewRecipeResolutionHandler(recipeService)
-		// New multi-step resolution service and handler
-		recipeResolutionService := services.NewRecipeResolutionService()
-		recipeMultistepHandler := handlers.NewRecipeMultistepResolutionHandler(recipeResolutionService)
+		recipeHandler := handlers.NewRecipeHandler()
 
 		// Only add the rate limiter if DISABLE_RATE_LIMITER is not set to "true".
 		if os.Getenv("DISABLE_RATE_LIMITER") != "true" {
@@ -102,8 +88,10 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
 			noRateLimit := router.Group("")
 			noRateLimit.Use(middleware.RateLimiter())
 			{
-				// Add all routes except login to the rate-limited group
-				noRateLimit.GET("/v1/health", handlers.HealthCheck)
+				// Add health check to the rate-limited group
+				noRateLimit.GET("/v1/health", func(c *gin.Context) {
+					c.JSON(200, gin.H{"status": "ok"})
+				})
 			}
 		}
 
@@ -127,17 +115,7 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
 			secured.GET("/admin/users", userHandler.GetAllUsers)
 
 			// Recipe endpoints
-			secured.GET("/recipes", recipeHandler.ListRecipes)
-			secured.GET("/recipes/:id", recipeHandler.GetRecipe)
-			secured.POST("/recipes", recipeHandler.SaveRecipe)
-			secured.PUT("/recipes/:id", recipeHandler.UpdateRecipe)
-			secured.DELETE("/recipes/:id", recipeHandler.DeleteRecipe)
-			secured.POST("/recipes/resolve", recipeResolutionHandler.ResolveRecipe)
-			secured.POST("/recipes/resolve/query", recipeMultistepHandler.QueryRecipe)
-			secured.POST("/recipes/resolve/modify", recipeMultistepHandler.ModifyRecipe)
-			secured.POST("/recipes/:id/rate", recipeHandler.RateRecipe)
-			secured.GET("/recipes/:id/ratings", recipeHandler.GetRecipeRatings)
-			secured.GET("/recipes/search", recipeHandler.SearchRecipes)
+			secured.POST("/recipes", recipeHandler.GenerateRecipe)
 		}
 	}
 
