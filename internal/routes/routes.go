@@ -80,7 +80,7 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger, redisClient *repositories.
 
 		// Initialize handlers
 		userHandler := handlers.NewUserHandler(userService)
-		recipeHandler := handlers.NewRecipeHandler(redisClient)
+		recipeHandler := handlers.NewRecipeHandler(redisClient, db)
 
 		// Only add the rate limiter if DISABLE_RATE_LIMITER is not set to "true".
 		if os.Getenv("DISABLE_RATE_LIMITER") != "true" {
@@ -116,6 +116,7 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger, redisClient *repositories.
 
 			// Recipe endpoints
 			secured.POST("/recipes", recipeHandler.GenerateRecipe)
+			secured.POST("/recipes/:id/approve", recipeHandler.ApproveRecipe)
 		}
 	}
 

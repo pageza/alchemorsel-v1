@@ -16,8 +16,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    entrypoint: /app/entrypoint.sh
+    entrypoint: ["sh", "/app/entrypoint.sh"]
     command: []
+    volumes:
+      - ./secrets:/app/secrets:ro
     environment:
       DB_DRIVER: ${DB_DRIVER:-postgres}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-reasoner}
@@ -38,6 +40,8 @@ services:
       - postgres_password
       - deepseek_api_key
       - deepseek_api_url
+      - openai_api_key
+      - openai_api_url
 
   postgres:
     image: ankane/pgvector
@@ -82,3 +86,7 @@ secrets:
     file: ./secrets/deepseek_api_key.txt
   deepseek_api_url:
     file: ./secrets/deepseek_api_url.txt
+  openai_api_key:
+    file: ./secrets/openai_api_key.txt
+  openai_api_url:
+    file: ./secrets/openai_api_url.txt

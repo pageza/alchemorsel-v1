@@ -48,7 +48,7 @@ WORKDIR /app
 COPY --from=builder /app/main .
 
 # Copy migrations directory
-COPY --from=builder /app/internal/migrations /app/migrations
+COPY --from=builder /app/internal/migrations /app/internal/migrations
 
 # Copy environment file
 COPY --from=builder /app/.env ./.env

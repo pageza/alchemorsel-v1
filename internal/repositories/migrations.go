@@ -1,10 +1,11 @@
 package repositories
 
 import (
-	"context"
 	"fmt"
 	"os"
 
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -58,26 +59,6 @@ func InitializeDB(dsn string) error {
 	return nil
 }
 
-// AutoMigrate runs database migrations for our models.
-func AutoMigrate() error {
-	// Use the underlying sql.DB to execute the extension creation outside any transaction.
-	sqlDB, err := DB.DB()
-	if err != nil {
-		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
-	}
-
-	// Only create UUID extension for PostgreSQL
-	if os.Getenv("DB_DRIVER") == "postgres" {
-		if _, err := sqlDB.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"); err != nil {
-			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
-		}
-	}
-
-	return DB.WithContext(context.Background()).AutoMigrate(
-		&models.User{},
-	)
-}
-
 // ClearUsers removes all data from the users table.
 // This helper is used for test and integration setup.
 func ClearUsers() error {
@@ -92,29 +73,67 @@ func RunMigrations(db *gorm.DB) error {
 		return fmt.Errorf("database not initialized")
 	}
 
-	// Use the underlying sql.DB to execute the extension creation outside any transaction.
-	sqlDB, err := db.DB()
-	if err != nil {
-		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
-	}
-
-	// Only create UUID extension for PostgreSQL
+	// Create required PostgreSQL extensions using GORM
 	if os.Getenv("DB_DRIVER") == "postgres" {
-		// Create the extension in the public schema
-		if _, err := sqlDB.ExecContext(context.Background(), "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public;"); err != nil {
+		// Create extensions using GORM's Exec
+		if err := db.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA public").Error; err != nil {
 			return fmt.Errorf("failed to create uuid-ossp extension: %w", err)
 		}
-		// Grant usage on the extension to public
-		if _, err := sqlDB.ExecContext(context.Background(), "GRANT USAGE ON SCHEMA public TO public;"); err != nil {
-			return fmt.Errorf("failed to grant usage on public schema: %w", err)
-		}
-		// Grant execute on all functions in the extension
-		if _, err := sqlDB.ExecContext(context.Background(), "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO public;"); err != nil {
-			return fmt.Errorf("failed to grant execute on functions: %w", err)
+		if err := db.Exec("CREATE EXTENSION IF NOT EXISTS vector").Error; err != nil {
+			return fmt.Errorf("failed to create vector extension: %w", err)
 		}
 	}
 
-	return db.AutoMigrate(
-		&models.User{},
-	)
+	// Drop existing tables using Migrator
+	if err := db.Migrator().DropTable(&models.Recipe{}, &models.User{}); err != nil {
+		return fmt.Errorf("failed to drop tables: %w", err)
+	}
+
+	// Create tables using Migrator
+	if err := db.Migrator().CreateTable(&models.User{}); err != nil {
+		return fmt.Errorf("failed to create users table: %w", err)
+	}
+
+	// Create recipes table with explicit column definitions
+	if err := db.Exec(`
+		CREATE TABLE recipes (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			title VARCHAR(255) NOT NULL,
+			description TEXT,
+			servings INTEGER,
+			prep_time_minutes INTEGER,
+			cook_time_minutes INTEGER,
+			total_time_minutes INTEGER,
+			ingredients JSONB,
+			instructions JSONB,
+			nutrition JSONB,
+			tags TEXT[],
+			difficulty VARCHAR(50),
+			embedding vector(1536),
+			created_at TIMESTAMP WITH TIME ZONE,
+			updated_at TIMESTAMP WITH TIME ZONE,
+			user_id UUID NOT NULL,
+			CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(id)
+		)
+	`).Error; err != nil {
+		return fmt.Errorf("failed to create recipes table: %w", err)
+	}
+
+	// Create vector similarity search index using GORM
+	if os.Getenv("DB_DRIVER") == "postgres" {
+		var indexExists bool
+		err := db.Raw("SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'recipe_embedding_idx')").Scan(&indexExists).Error
+		if err != nil {
+			return fmt.Errorf("failed to check if index exists: %w", err)
+		}
+
+		if !indexExists {
+			err = db.Exec("CREATE INDEX recipe_embedding_idx ON recipes USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)").Error
+			if err != nil {
+				return fmt.Errorf("failed to create vector similarity index: %w", err)
+			}
+		}
+	}
+
+	return nil
 }

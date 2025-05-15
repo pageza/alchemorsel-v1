@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/handlers"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 )
@@ -18,8 +19,15 @@ func main() {
 		log.Fatalf("Failed to initialize Redis client: %v", err)
 	}
 
+	// Initialize database
+	config := db.NewConfig()
+	database, err := db.InitDB(config)
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
 	// Initialize handlers
-	recipeHandler := handlers.NewRecipeHandler(redisClient)
+	recipeHandler := handlers.NewRecipeHandler(redisClient, database)
 
 	// Setup routes
 	v1 := router.Group("/v1")

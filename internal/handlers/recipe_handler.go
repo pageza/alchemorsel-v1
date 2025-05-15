@@ -14,18 +14,37 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/dtos"
+	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
+	"github.com/sashabaranov/go-openai"
+	"gorm.io/gorm"
 )
 
 // RecipeHandler handles HTTP requests for recipe generation
 type RecipeHandler struct {
-	redisClient *repositories.RedisClient
+	redisClient  *repositories.RedisClient
+	db           *gorm.DB
+	openaiClient *openai.Client
 }
 
 // NewRecipeHandler creates a new instance of RecipeHandler
-func NewRecipeHandler(redisClient *repositories.RedisClient) *RecipeHandler {
+func NewRecipeHandler(redisClient *repositories.RedisClient, db *gorm.DB) *RecipeHandler {
+	// Get OpenAI API key from secrets
+	openaiKey, err := readSecretFile("openai_api_key")
+	if err != nil {
+		log.Printf("Warning: Failed to read OpenAI API key: %v", err)
+	}
+	log.Printf("DEBUG: OpenAI API key read from file: '%s'", openaiKey)
+
+	// Create OpenAI client with configuration
+	config := openai.DefaultConfig(openaiKey)
+	// No need to modify the base URL - using the default OpenAI URL
+	openaiClient := openai.NewClientWithConfig(config)
+
 	return &RecipeHandler{
-		redisClient: redisClient,
+		redisClient:  redisClient,
+		db:           db,
+		openaiClient: openaiClient,
 	}
 }
 
@@ -109,7 +128,8 @@ func readSecretFile(secretName string) (string, error) {
 		log.Printf("Successfully read secret from Docker secrets path")
 	}
 
-	return string(bytes.TrimSpace(data)), nil
+	// Remove any trailing newlines but preserve the rest of the content exactly
+	return strings.TrimRight(string(data), "\n\r"), nil
 }
 
 // GenerateRecipe handles the request to generate a recipe
@@ -398,5 +418,163 @@ func (h *RecipeHandler) GenerateRecipe(c *gin.Context) {
 			Message: "Timeout while reading response from DeepSeek API. Please try again later or with a simpler query.",
 		})
 		return
+	}
+}
+
+// ApproveRecipe handles the approval of a generated recipe
+func (h *RecipeHandler) ApproveRecipe(c *gin.Context) {
+	// Get recipe ID from path
+	recipeID := c.Param("id")
+	if recipeID == "" {
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Recipe ID is required",
+		})
+		return
+	}
+
+	// Get user ID from context (set by auth middleware)
+	userID, exists := c.Get("currentUser")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, dtos.ErrorResponse{
+			Code:    "UNAUTHORIZED",
+			Message: "User ID not found in context",
+		})
+		return
+	}
+
+	log.Printf("Approving recipe %s for user %s", recipeID, userID)
+
+	// Get recipe from Redis
+	cachedRecipe, err := h.redisClient.GetRecipe(c.Request.Context(), recipeID)
+	if err != nil {
+		log.Printf("Failed to get recipe from Redis: %v", err)
+		c.JSON(http.StatusNotFound, dtos.ErrorResponse{
+			Code:    "NOT_FOUND",
+			Message: "Recipe not found in cache",
+		})
+		return
+	}
+
+	// Prepare text for embedding
+	embedText := fmt.Sprintf("%s\n%s\n%s\n%s",
+		cachedRecipe.Current.Title,
+		cachedRecipe.Current.Description,
+		strings.Join(cachedRecipe.Current.Tags, ", "),
+		strings.Join(func() []string {
+			items := make([]string, len(cachedRecipe.Current.Ingredients))
+			for i, ing := range cachedRecipe.Current.Ingredients {
+				items[i] = ing.Item
+			}
+			return items
+		}(), ", "),
+	)
+
+	log.Printf("Getting embeddings for recipe: %s", cachedRecipe.Current.Title)
+
+	// Get embeddings from OpenAI
+	resp, err := h.openaiClient.CreateEmbeddings(
+		c.Request.Context(),
+		openai.EmbeddingRequest{
+			Input: []string{embedText},
+			Model: openai.AdaEmbeddingV2,
+		},
+	)
+	if err != nil {
+		log.Printf("Failed to get embeddings: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "EMBEDDING_ERROR",
+			Message: "Failed to generate embeddings",
+		})
+		return
+	}
+
+	if len(resp.Data) == 0 {
+		log.Printf("No embeddings returned from OpenAI")
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "EMBEDDING_ERROR",
+			Message: "No embeddings returned",
+		})
+		return
+	}
+
+	// Convert embeddings to []float32
+	embedding := make([]float32, len(resp.Data[0].Embedding))
+	for i, v := range resp.Data[0].Embedding {
+		embedding[i] = float32(v)
+	}
+
+	// Create recipe model
+	recipe := models.Recipe{
+		Title:            cachedRecipe.Current.Title,
+		Description:      cachedRecipe.Current.Description,
+		Servings:         cachedRecipe.Current.Servings,
+		PrepTimeMinutes:  cachedRecipe.Current.PrepTimeMinutes,
+		CookTimeMinutes:  cachedRecipe.Current.CookTimeMinutes,
+		TotalTimeMinutes: cachedRecipe.Current.TotalTimeMinutes,
+		Ingredients:      convertToModelIngredients(cachedRecipe.Current.Ingredients),
+		Instructions:     convertToModelInstructions(cachedRecipe.Current.Instructions),
+		Nutrition:        convertToModelNutrition(cachedRecipe.Current.Nutrition),
+		Tags:             cachedRecipe.Current.Tags,
+		Difficulty:       cachedRecipe.Current.Difficulty,
+		Embedding:        embedding,
+		UserID:           userID.(string),
+	}
+
+	log.Printf("Saving recipe to database")
+
+	// Save to database
+	if err := h.db.Create(&recipe).Error; err != nil {
+		log.Printf("Failed to save recipe to database: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "DATABASE_ERROR",
+			Message: "Failed to save recipe",
+		})
+		return
+	}
+
+	// Delete from Redis since it's now in the database
+	if err := h.redisClient.DeleteRecipe(c.Request.Context(), recipeID); err != nil {
+		log.Printf("Warning: Failed to delete recipe from Redis: %v", err)
+	}
+
+	log.Printf("Successfully approved and saved recipe %s", recipe.ID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "Recipe approved and saved",
+		"recipe_id": recipe.ID,
+	})
+}
+
+// Convert repositories types to models types
+func convertToModelIngredients(repoIngredients []repositories.Ingredient) []models.Ingredient {
+	modelIngredients := make([]models.Ingredient, len(repoIngredients))
+	for i, ing := range repoIngredients {
+		modelIngredients[i] = models.Ingredient{
+			Item:   ing.Item,
+			Amount: ing.Amount,
+			Unit:   ing.Unit,
+		}
+	}
+	return modelIngredients
+}
+
+func convertToModelInstructions(repoInstructions []repositories.Instruction) []models.Instruction {
+	modelInstructions := make([]models.Instruction, len(repoInstructions))
+	for i, inst := range repoInstructions {
+		modelInstructions[i] = models.Instruction{
+			Step:        inst.Step,
+			Description: inst.Description,
+		}
+	}
+	return modelInstructions
+}
+
+func convertToModelNutrition(repoNutrition repositories.Nutrition) models.Nutrition {
+	return models.Nutrition{
+		Calories: repoNutrition.Calories,
+		Protein:  repoNutrition.Protein,
+		Carbs:    repoNutrition.Carbs,
+		Fat:      repoNutrition.Fat,
 	}
 }

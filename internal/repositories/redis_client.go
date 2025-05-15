@@ -112,3 +112,12 @@ func (rc *RedisClient) UpdateRecipe(ctx context.Context, tempID string, newVersi
 
 	return nil
 }
+
+// DeleteRecipe removes a recipe from Redis
+func (rc *RedisClient) DeleteRecipe(ctx context.Context, tempID string) error {
+	key := fmt.Sprintf("recipe:%s", tempID)
+	if err := rc.client.Del(ctx, key).Err(); err != nil {
+		return fmt.Errorf("failed to delete recipe from cache: %v", err)
+	}
+	return nil
+}
