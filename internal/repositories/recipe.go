@@ -3,6 +3,7 @@ package repositories
 import "encoding/json"
 
 type Recipe struct {
+	ID               string        `json:"id"`
 	Title            string        `json:"title"`
 	Description      string        `json:"description"`
 	Servings         int           `json:"servings"`

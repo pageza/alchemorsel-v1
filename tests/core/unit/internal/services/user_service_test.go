@@ -13,8 +13,8 @@ import (
 	"github.com/docker/go-connections/nat"
 	_ "github.com/lib/pq" // cursor-- Added to register the Postgres SQL driver for wait.ForSQL
 	"github.com/pageza/alchemorsel-v1/internal/db"
+	"github.com/pageza/alchemorsel-v1/internal/migrations"
 	"github.com/pageza/alchemorsel-v1/internal/models"
-	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -78,19 +78,17 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	if err := db.DB.AutoMigrate(&models.User{}); err != nil {
-		fmt.Printf("Failed to auto-migrate: %v\n", err)
+	// Set up test database
+	config := db.NewConfig()
+	database, err := db.InitDB(config)
+	if err != nil {
+		fmt.Printf("Failed to initialize test database: %v\n", err)
 		os.Exit(1)
 	}
 
-	if err := repositories.InitializeDB(dsn); err != nil {
-		fmt.Printf("Failed to initialize repositories DB: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Run migrations for all models to create tables, including "recipes".
-	if err := repositories.AutoMigrate(); err != nil {
-		fmt.Printf("Failed to auto-migrate: %v\n", err)
+	// Run migrations
+	if err := migrations.RunMigrations(database); err != nil {
+		fmt.Printf("Failed to run migrations: %v\n", err)
 		os.Exit(1)
 	}
 

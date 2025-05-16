@@ -1,11 +1,11 @@
 package integration
 
 import (
-	"log"
 	"os"
 
 	"github.com/pageza/alchemorsel-v1/internal/logging"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
+	"github.com/redis/go-redis/v9"
 )
 
 func createTestLogger() *logging.Logger {
@@ -24,16 +24,17 @@ func createTestLogger() *logging.Logger {
 }
 
 func createTestRedisClient() *repositories.RedisClient {
-	// For tests, try to connect to Redis, but don't fail if it's not available
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
 		redisAddr = "localhost:6379"
 	}
 
-	redisClient, err := repositories.NewRedisClient(redisAddr)
-	if err != nil {
-		log.Printf("Warning: Failed to connect to Redis: %v. Using nil client for tests.", err)
-		return nil
-	}
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     redisAddr,
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+
+	redisClient := repositories.NewRedisClient(rdb)
 	return redisClient
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/handlers"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -14,10 +15,11 @@ func main() {
 	router := gin.Default()
 
 	// Initialize Redis client
-	redisClient, err := repositories.NewRedisClient("redis:6379")
-	if err != nil {
-		log.Fatalf("Failed to initialize Redis client: %v", err)
-	}
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     "redis:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
 
 	// Initialize database
 	config := db.NewConfig()
@@ -26,8 +28,14 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
+	// Initialize DeepSeek client
+	deepseekClient := repositories.NewDeepSeekClient("your-api-key", "your-api-url")
+
+	// Initialize recipe cache
+	recipeCache := repositories.NewRecipeCache(rdb)
+
 	// Initialize handlers
-	recipeHandler := handlers.NewRecipeHandler(redisClient, database)
+	recipeHandler := handlers.NewRecipeHandler(database, recipeCache, deepseekClient)
 
 	// Setup routes
 	v1 := router.Group("/v1")

@@ -3,7 +3,6 @@ package testhelpers
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,12 +11,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt"
 	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/dtos"
 	"github.com/pageza/alchemorsel-v1/internal/logging"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
 )
@@ -151,11 +151,13 @@ func setupTestRedis() *repositories.RedisClient {
 		redisAddr = "localhost:6379"
 	}
 
-	redisClient, err := repositories.NewRedisClient(redisAddr)
-	if err != nil {
-		log.Printf("Warning: Failed to connect to Redis: %v. Using nil client for tests.", err)
-		return nil
-	}
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     redisAddr,
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+
+	redisClient := repositories.NewRedisClient(rdb)
 	return redisClient
 }
 

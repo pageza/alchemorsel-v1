@@ -11,6 +11,7 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/migrations"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/pageza/alchemorsel-v1/internal/routes"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -89,10 +90,14 @@ func main() {
 	logger.Info("Migrations completed")
 
 	// Initialize Redis client
-	redisClient, err := repositories.NewRedisClient("redis:6379")
-	if err != nil {
-		log.Fatalf("Failed to initialize Redis client: %v", err)
-	}
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     "redis:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+
+	// Create Redis client wrapper
+	redisClient := repositories.NewRedisClient(rdb)
 
 	// Setup router with Redis client
 	router := routes.SetupRouter(database, logger, redisClient)

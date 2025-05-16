@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,35 +18,22 @@ import (
 	"github.com/pageza/alchemorsel-v1/internal/dtos"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
-	"github.com/sashabaranov/go-openai"
 	"gorm.io/gorm"
 )
 
-// RecipeHandler handles HTTP requests for recipe generation
+// RecipeHandler handles recipe-related HTTP requests
 type RecipeHandler struct {
-	redisClient  *repositories.RedisClient
-	db           *gorm.DB
-	openaiClient *openai.Client
+	db             *gorm.DB
+	recipeCache    *repositories.RecipeCache
+	deepseekClient *repositories.DeepSeekClient
 }
 
-// NewRecipeHandler creates a new instance of RecipeHandler
-func NewRecipeHandler(redisClient *repositories.RedisClient, db *gorm.DB) *RecipeHandler {
-	// Get OpenAI API key from secrets
-	openaiKey, err := readSecretFile("openai_api_key")
-	if err != nil {
-		log.Printf("Warning: Failed to read OpenAI API key: %v", err)
-	}
-	log.Printf("DEBUG: OpenAI API key read from file: '%s'", openaiKey)
-
-	// Create OpenAI client with configuration
-	config := openai.DefaultConfig(openaiKey)
-	// No need to modify the base URL - using the default OpenAI URL
-	openaiClient := openai.NewClientWithConfig(config)
-
+// NewRecipeHandler creates a new RecipeHandler
+func NewRecipeHandler(db *gorm.DB, recipeCache *repositories.RecipeCache, deepseekClient *repositories.DeepSeekClient) *RecipeHandler {
 	return &RecipeHandler{
-		redisClient:  redisClient,
-		db:           db,
-		openaiClient: openaiClient,
+		db:             db,
+		recipeCache:    recipeCache,
+		deepseekClient: deepseekClient,
 	}
 }
 
@@ -372,7 +361,7 @@ func (h *RecipeHandler) GenerateRecipe(c *gin.Context) {
 
 		log.Printf("Attempting to cache recipe in Redis - Title: %s", recipe.Title)
 		// Cache the recipe in Redis
-		tempID, err := h.redisClient.CacheRecipe(c.Request.Context(), recipe)
+		tempID, err := h.recipeCache.CacheRecipe(c.Request.Context(), recipe)
 		if err != nil {
 			log.Printf("Failed to cache recipe in Redis: %v", err)
 			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
@@ -384,7 +373,7 @@ func (h *RecipeHandler) GenerateRecipe(c *gin.Context) {
 
 		// Verify the recipe was cached by attempting to retrieve it
 		log.Printf("Verifying recipe cache - Attempting to retrieve recipe with ID: %s", tempID)
-		cachedRecipe, err := h.redisClient.GetRecipe(c.Request.Context(), tempID)
+		cachedRecipe, err := h.recipeCache.GetRecipe(c.Request.Context(), tempID)
 		if err != nil {
 			log.Printf("Warning: Could not verify recipe cache - retrieval failed: %v", err)
 		} else {
@@ -446,7 +435,7 @@ func (h *RecipeHandler) ApproveRecipe(c *gin.Context) {
 	log.Printf("Approving recipe %s for user %s", recipeID, userID)
 
 	// Get recipe from Redis
-	cachedRecipe, err := h.redisClient.GetRecipe(c.Request.Context(), recipeID)
+	cachedRecipe, err := h.recipeCache.GetRecipe(c.Request.Context(), recipeID)
 	if err != nil {
 		log.Printf("Failed to get recipe from Redis: %v", err)
 		c.JSON(http.StatusNotFound, dtos.ErrorResponse{
@@ -473,12 +462,9 @@ func (h *RecipeHandler) ApproveRecipe(c *gin.Context) {
 	log.Printf("Getting embeddings for recipe: %s", cachedRecipe.Current.Title)
 
 	// Get embeddings from OpenAI
-	resp, err := h.openaiClient.CreateEmbeddings(
+	resp, err := h.deepseekClient.GetEmbeddings(
 		c.Request.Context(),
-		openai.EmbeddingRequest{
-			Input: []string{embedText},
-			Model: openai.AdaEmbeddingV2,
-		},
+		embedText,
 	)
 	if err != nil {
 		log.Printf("Failed to get embeddings: %v", err)
@@ -490,7 +476,7 @@ func (h *RecipeHandler) ApproveRecipe(c *gin.Context) {
 	}
 
 	if len(resp.Data) == 0 {
-		log.Printf("No embeddings returned from OpenAI")
+		log.Printf("No embeddings returned from DeepSeek")
 		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
 			Code:    "EMBEDDING_ERROR",
 			Message: "No embeddings returned",
@@ -534,7 +520,7 @@ func (h *RecipeHandler) ApproveRecipe(c *gin.Context) {
 	}
 
 	// Delete from Redis since it's now in the database
-	if err := h.redisClient.DeleteRecipe(c.Request.Context(), recipeID); err != nil {
+	if err := h.recipeCache.DeleteRecipe(c.Request.Context(), recipeID); err != nil {
 		log.Printf("Warning: Failed to delete recipe from Redis: %v", err)
 	}
 
@@ -577,4 +563,1011 @@ func convertToModelNutrition(repoNutrition repositories.Nutrition) models.Nutrit
 		Carbs:    repoNutrition.Carbs,
 		Fat:      repoNutrition.Fat,
 	}
+}
+
+// SearchRecipes handles recipe search requests using hybrid search
+func (h *RecipeHandler) SearchRecipes(c *gin.Context) {
+	var req struct {
+		Query string `json:"query" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("Invalid request body: %v", err)
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Invalid request body: query field is required",
+		})
+		return
+	}
+
+	log.Printf("Processing search query: %s", req.Query)
+
+	// Get embeddings for the search query
+	resp, err := h.deepseekClient.GetEmbeddings(
+		c.Request.Context(),
+		req.Query,
+	)
+	if err != nil {
+		log.Printf("Failed to get embeddings: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "EMBEDDING_ERROR",
+			Message: "Failed to generate embeddings for search",
+		})
+		return
+	}
+
+	if len(resp.Data) == 0 {
+		log.Printf("No embeddings returned from DeepSeek")
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "EMBEDDING_ERROR",
+			Message: "No embeddings returned",
+		})
+		return
+	}
+
+	// Convert embeddings to []float32
+	queryEmbedding := make([]float32, len(resp.Data[0].Embedding))
+	for i, v := range resp.Data[0].Embedding {
+		queryEmbedding[i] = float32(v)
+	}
+
+	// First, try to find exact matches using text search
+	var exactMatches []models.Recipe
+	if err := h.db.Select("id, title, description, servings, prep_time_minutes, cook_time_minutes, total_time_minutes, ingredients, instructions, nutrition, tags, difficulty, created_at, updated_at, user_id").
+		Where("title ILIKE ? OR description ILIKE ?",
+			"%"+req.Query+"%", "%"+req.Query+"%").
+		Find(&exactMatches).Error; err != nil {
+		log.Printf("Failed to find exact matches: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "DATABASE_ERROR",
+			Message: "Failed to search recipes",
+		})
+		return
+	}
+
+	// Then find similar recipes using vector similarity search
+	var similarRecipes []models.Recipe
+	if err := h.db.Raw(`
+		SELECT id, title, description, servings, prep_time_minutes, cook_time_minutes, total_time_minutes, 
+		       ingredients, instructions, nutrition, tags, difficulty, created_at, updated_at, user_id,
+		       1 - ((embedding->>'data')::float[]::vector <=> $1::float[]::vector) as similarity
+		FROM recipes
+		WHERE 1 - ((embedding->>'data')::float[]::vector <=> $1::float[]::vector) > 0.7
+		ORDER BY similarity DESC
+		LIMIT 5
+	`, queryEmbedding).Scan(&similarRecipes).Error; err != nil {
+		log.Printf("Failed to find similar recipes: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "DATABASE_ERROR",
+			Message: "Failed to search recipes",
+		})
+		return
+	}
+
+	// Filter out any recipes that are already in exact matches
+	filteredSimilar := make([]models.Recipe, 0)
+	for _, similar := range similarRecipes {
+		isExactMatch := false
+		for _, exact := range exactMatches {
+			if similar.ID == exact.ID {
+				isExactMatch = true
+				break
+			}
+		}
+		if !isExactMatch {
+			filteredSimilar = append(filteredSimilar, similar)
+		}
+	}
+
+	// Return both exact and similar matches
+	c.JSON(http.StatusOK, gin.H{
+		"exact_matches":   exactMatches,
+		"similar_matches": filteredSimilar,
+		"message":         "If you don't find what you're looking for, you can generate a new recipe",
+	})
+}
+
+// StartRecipeModification handles the request to start modifying a recipe
+func (h *RecipeHandler) StartRecipeModification(c *gin.Context) {
+	// Get recipe ID from path
+	recipeID := c.Param("id")
+	if recipeID == "" {
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Recipe ID is required",
+		})
+		return
+	}
+
+	// Get user ID from context (set by auth middleware)
+	userID, exists := c.Get("currentUser")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, dtos.ErrorResponse{
+			Code:    "UNAUTHORIZED",
+			Message: "User ID not found in context",
+		})
+		return
+	}
+
+	// Get recipe from database with specific fields to avoid embedding scan issues
+	var recipe struct {
+		ID               string    `gorm:"column:id"`
+		Title            string    `gorm:"column:title"`
+		Description      string    `gorm:"column:description"`
+		Servings         int       `gorm:"column:servings"`
+		PrepTimeMinutes  int       `gorm:"column:prep_time_minutes"`
+		CookTimeMinutes  int       `gorm:"column:cook_time_minutes"`
+		TotalTimeMinutes int       `gorm:"column:total_time_minutes"`
+		Ingredients      []byte    `gorm:"column:ingredients"`
+		Instructions     []byte    `gorm:"column:instructions"`
+		Nutrition        []byte    `gorm:"column:nutrition"`
+		Tags             string    `gorm:"column:tags"`
+		Difficulty       string    `gorm:"column:difficulty"`
+		CreatedAt        time.Time `gorm:"column:created_at"`
+		UpdatedAt        time.Time `gorm:"column:updated_at"`
+	}
+
+	if err := h.db.Table("recipes").
+		Select("id, title, description, servings, prep_time_minutes, cook_time_minutes, total_time_minutes, ingredients, instructions, nutrition, tags, difficulty, created_at, updated_at").
+		Where("id = ? AND user_id = ?", recipeID, userID).
+		First(&recipe).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dtos.ErrorResponse{
+				Code:    "NOT_FOUND",
+				Message: "Recipe not found",
+			})
+			return
+		}
+		log.Printf("Failed to get recipe from database: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "DATABASE_ERROR",
+			Message: "Failed to get recipe",
+		})
+		return
+	}
+
+	// Parse ingredients
+	var ingredients []models.Ingredient
+	if len(recipe.Ingredients) > 0 {
+		if err := json.Unmarshal(recipe.Ingredients, &ingredients); err != nil {
+			log.Printf("Failed to parse ingredients for recipe %s: %v\nRaw data: %s", recipe.ID, err, string(recipe.Ingredients))
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "DATABASE_ERROR",
+				Message: "Failed to parse recipe data",
+			})
+			return
+		}
+	}
+
+	// Parse instructions
+	var instructions []models.Instruction
+	if len(recipe.Instructions) > 0 {
+		if err := json.Unmarshal(recipe.Instructions, &instructions); err != nil {
+			log.Printf("Failed to parse instructions for recipe %s: %v\nRaw data: %s", recipe.ID, err, string(recipe.Instructions))
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "DATABASE_ERROR",
+				Message: "Failed to parse recipe data",
+			})
+			return
+		}
+	}
+
+	// Parse nutrition
+	var nutrition models.Nutrition
+	if len(recipe.Nutrition) > 0 {
+		if err := json.Unmarshal(recipe.Nutrition, &nutrition); err != nil {
+			log.Printf("Failed to parse nutrition for recipe %s: %v\nRaw data: %s", recipe.ID, err, string(recipe.Nutrition))
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "DATABASE_ERROR",
+				Message: "Failed to parse recipe data",
+			})
+			return
+		}
+	}
+
+	// Parse tags from PostgreSQL array format
+	var tags []string
+	if recipe.Tags != "" {
+		// Remove the curly braces and split by comma
+		tagsStr := strings.Trim(recipe.Tags, "{}")
+		if tagsStr != "" {
+			// Split by comma and trim spaces
+			tagParts := strings.Split(tagsStr, ",")
+			tags = make([]string, len(tagParts))
+			for i, tag := range tagParts {
+				// Remove quotes if present and trim spaces
+				tag = strings.Trim(tag, "\" ")
+				tags[i] = tag
+			}
+		}
+	}
+
+	// Convert to repository type
+	repoRecipe := repositories.Recipe{
+		ID:               recipe.ID,
+		Title:            recipe.Title,
+		Description:      recipe.Description,
+		Servings:         recipe.Servings,
+		PrepTimeMinutes:  recipe.PrepTimeMinutes,
+		CookTimeMinutes:  recipe.CookTimeMinutes,
+		TotalTimeMinutes: recipe.TotalTimeMinutes,
+		Ingredients:      convertToRepoIngredients(ingredients),
+		Instructions:     convertToRepoInstructions(instructions),
+		Nutrition:        convertToRepoNutrition(nutrition),
+		Tags:             tags,
+		Difficulty:       recipe.Difficulty,
+	}
+
+	// Cache the recipe in Redis with modification count 0
+	tempID, err := h.recipeCache.CacheRecipe(c.Request.Context(), repoRecipe)
+	if err != nil {
+		log.Printf("Failed to cache recipe in Redis: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to cache recipe for modification",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"recipe_id": tempID,
+		"recipe":    repoRecipe,
+		"status":    "ready_for_modification",
+	})
+}
+
+// ModifyRecipe handles recipe modification requests
+func (h *RecipeHandler) ModifyRecipe(c *gin.Context) {
+	// Get recipe ID from path
+	recipeID := c.Param("id")
+	if recipeID == "" {
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Recipe ID is required",
+		})
+		return
+	}
+
+	// Get user ID from context (set by auth middleware)
+	userID, exists := c.Get("currentUser")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, dtos.ErrorResponse{
+			Code:    "UNAUTHORIZED",
+			Message: "User ID not found in context",
+		})
+		return
+	}
+
+	// Parse the modification request
+	var modification struct {
+		Title            *string                    `json:"title,omitempty"`
+		Description      *string                    `json:"description,omitempty"`
+		Servings         *int                       `json:"servings,omitempty"`
+		PrepTimeMinutes  *int                       `json:"prep_time_minutes,omitempty"`
+		CookTimeMinutes  *int                       `json:"cook_time_minutes,omitempty"`
+		TotalTimeMinutes *int                       `json:"total_time_minutes,omitempty"`
+		Ingredients      []repositories.Ingredient  `json:"ingredients,omitempty"`
+		Instructions     []repositories.Instruction `json:"instructions,omitempty"`
+		Nutrition        *repositories.Nutrition    `json:"nutrition,omitempty"`
+		Tags             []string                   `json:"tags,omitempty"`
+		Difficulty       *string                    `json:"difficulty,omitempty"`
+	}
+
+	if err := c.ShouldBindJSON(&modification); err != nil {
+		log.Printf("Invalid request body: %v", err)
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Invalid request body",
+		})
+		return
+	}
+
+	// First, try to get the recipe from Redis
+	cachedRecipe, err := h.recipeCache.GetRecipe(c.Request.Context(), recipeID)
+	if err != nil {
+		// If not in Redis, try to get from database
+		var recipe models.Recipe
+		if err := h.db.First(&recipe, "id = ? AND user_id = ?", recipeID, userID).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(http.StatusNotFound, dtos.ErrorResponse{
+					Code:    "NOT_FOUND",
+					Message: "Recipe not found",
+				})
+				return
+			}
+			log.Printf("Failed to get recipe from database: %v", err)
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "DATABASE_ERROR",
+				Message: "Failed to get recipe",
+			})
+			return
+		}
+
+		// Convert database recipe to repository recipe
+		repoRecipe := repositories.Recipe{
+			Title:            recipe.Title,
+			Description:      recipe.Description,
+			Servings:         recipe.Servings,
+			PrepTimeMinutes:  recipe.PrepTimeMinutes,
+			CookTimeMinutes:  recipe.CookTimeMinutes,
+			TotalTimeMinutes: recipe.TotalTimeMinutes,
+			Ingredients:      convertToRepoIngredients(recipe.Ingredients),
+			Instructions:     convertToRepoInstructions(recipe.Instructions),
+			Nutrition:        convertToRepoNutrition(recipe.Nutrition),
+			Tags:             recipe.Tags,
+			Difficulty:       recipe.Difficulty,
+		}
+
+		// Cache the recipe in Redis
+		tempID, err := h.recipeCache.CacheRecipe(c.Request.Context(), repoRecipe)
+		if err != nil {
+			log.Printf("Failed to cache recipe in Redis: %v", err)
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to cache recipe for modification",
+			})
+			return
+		}
+
+		// Get the cached recipe using the temporary ID
+		cachedRecipe, err = h.recipeCache.GetRecipe(c.Request.Context(), tempID)
+		if err != nil {
+			log.Printf("Failed to get cached recipe: %v", err)
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to get cached recipe",
+			})
+			return
+		}
+	}
+
+	// Check modification count for rate limiting
+	if cachedRecipe.ModificationCount >= 5 {
+		c.JSON(http.StatusTooManyRequests, dtos.ErrorResponse{
+			Code:    "RATE_LIMIT_EXCEEDED",
+			Message: "Maximum number of modifications reached. Please approve or start over.",
+		})
+		return
+	}
+
+	// Apply modifications to the cached recipe
+	updatedRecipe := cachedRecipe.Current
+
+	// Apply modifications
+	if modification.Title != nil {
+		updatedRecipe.Title = *modification.Title
+	}
+	if modification.Description != nil {
+		updatedRecipe.Description = *modification.Description
+	}
+	if modification.Servings != nil {
+		updatedRecipe.Servings = *modification.Servings
+	}
+	if modification.PrepTimeMinutes != nil {
+		updatedRecipe.PrepTimeMinutes = *modification.PrepTimeMinutes
+	}
+	if modification.CookTimeMinutes != nil {
+		updatedRecipe.CookTimeMinutes = *modification.CookTimeMinutes
+	}
+	if modification.TotalTimeMinutes != nil {
+		updatedRecipe.TotalTimeMinutes = *modification.TotalTimeMinutes
+	}
+	if modification.Ingredients != nil {
+		updatedRecipe.Ingredients = modification.Ingredients
+	}
+	if modification.Instructions != nil {
+		updatedRecipe.Instructions = modification.Instructions
+	}
+	if modification.Nutrition != nil {
+		updatedRecipe.Nutrition = *modification.Nutrition
+	}
+	if modification.Tags != nil {
+		updatedRecipe.Tags = modification.Tags
+	}
+	if modification.Difficulty != nil {
+		updatedRecipe.Difficulty = *modification.Difficulty
+	}
+
+	// Update in Redis
+	if err := h.recipeCache.UpdateRecipe(c.Request.Context(), recipeID, updatedRecipe); err != nil {
+		log.Printf("Failed to update recipe in Redis: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to update recipe",
+		})
+		return
+	}
+
+	// If the recipe was originally from the database, update it there as well
+	if cachedRecipe.ModificationCount == 0 {
+		// Prepare text for embedding if text content changed
+		if modification.Title != nil || modification.Description != nil || modification.Tags != nil || modification.Ingredients != nil {
+			// Prepare text for embedding
+			embedText := fmt.Sprintf("%s\n%s\n%s\n%s",
+				updatedRecipe.Title,
+				updatedRecipe.Description,
+				strings.Join(updatedRecipe.Tags, ", "),
+				strings.Join(func() []string {
+					items := make([]string, len(updatedRecipe.Ingredients))
+					for i, ing := range updatedRecipe.Ingredients {
+						items[i] = ing.Item
+					}
+					return items
+				}(), ", "),
+			)
+
+			// Get new embeddings
+			resp, err := h.deepseekClient.GetEmbeddings(
+				c.Request.Context(),
+				embedText,
+			)
+			if err != nil {
+				log.Printf("Failed to get embeddings: %v", err)
+				c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+					Code:    "EMBEDDING_ERROR",
+					Message: "Failed to generate embeddings",
+				})
+				return
+			}
+
+			if len(resp.Data) == 0 {
+				log.Printf("No embeddings returned from DeepSeek")
+				c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+					Code:    "EMBEDDING_ERROR",
+					Message: "No embeddings returned",
+				})
+				return
+			}
+
+			// Convert embeddings to []float32
+			embedding := make([]float32, len(resp.Data[0].Embedding))
+			for i, v := range resp.Data[0].Embedding {
+				embedding[i] = float32(v)
+			}
+
+			// Convert embedding to JSONB format
+			embeddingJSON, err := json.Marshal(embedding)
+			if err != nil {
+				log.Printf("Failed to marshal embedding: %v", err)
+				c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+					Code:    "INTERNAL_ERROR",
+					Message: "Failed to process embedding",
+				})
+				return
+			}
+
+			// Update the recipe in the database
+			if err := h.db.Model(&models.Recipe{}).Where("id = ?", recipeID).Updates(map[string]interface{}{
+				"title":              updatedRecipe.Title,
+				"description":        updatedRecipe.Description,
+				"servings":           updatedRecipe.Servings,
+				"prep_time_minutes":  updatedRecipe.PrepTimeMinutes,
+				"cook_time_minutes":  updatedRecipe.CookTimeMinutes,
+				"total_time_minutes": updatedRecipe.TotalTimeMinutes,
+				"ingredients":        convertToModelIngredients(updatedRecipe.Ingredients),
+				"instructions":       convertToModelInstructions(updatedRecipe.Instructions),
+				"nutrition":          convertToModelNutrition(updatedRecipe.Nutrition),
+				"tags":               updatedRecipe.Tags,
+				"difficulty":         updatedRecipe.Difficulty,
+				"embedding":          embeddingJSON,
+			}).Error; err != nil {
+				log.Printf("Failed to update recipe in database: %v", err)
+				c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+					Code:    "DATABASE_ERROR",
+					Message: "Failed to update recipe in database",
+				})
+				return
+			}
+		} else {
+			// Update the recipe in the database without changing embeddings
+			if err := h.db.Model(&models.Recipe{}).Where("id = ?", recipeID).Updates(map[string]interface{}{
+				"title":              updatedRecipe.Title,
+				"description":        updatedRecipe.Description,
+				"servings":           updatedRecipe.Servings,
+				"prep_time_minutes":  updatedRecipe.PrepTimeMinutes,
+				"cook_time_minutes":  updatedRecipe.CookTimeMinutes,
+				"total_time_minutes": updatedRecipe.TotalTimeMinutes,
+				"ingredients":        convertToModelIngredients(updatedRecipe.Ingredients),
+				"instructions":       convertToModelInstructions(updatedRecipe.Instructions),
+				"nutrition":          convertToModelNutrition(updatedRecipe.Nutrition),
+				"tags":               updatedRecipe.Tags,
+				"difficulty":         updatedRecipe.Difficulty,
+			}).Error; err != nil {
+				log.Printf("Failed to update recipe in database: %v", err)
+				c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+					Code:    "DATABASE_ERROR",
+					Message: "Failed to update recipe in database",
+				})
+				return
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"recipe_id": recipeID,
+		"recipe":    updatedRecipe,
+		"status":    "updated",
+	})
+}
+
+// Convert model types to repository types
+func convertToRepoIngredients(modelIngredients []models.Ingredient) []repositories.Ingredient {
+	repoIngredients := make([]repositories.Ingredient, len(modelIngredients))
+	for i, ing := range modelIngredients {
+		repoIngredients[i] = repositories.Ingredient{
+			Item:   ing.Item,
+			Amount: ing.Amount,
+			Unit:   ing.Unit,
+		}
+	}
+	return repoIngredients
+}
+
+func convertToRepoInstructions(modelInstructions []models.Instruction) []repositories.Instruction {
+	repoInstructions := make([]repositories.Instruction, len(modelInstructions))
+	for i, inst := range modelInstructions {
+		repoInstructions[i] = repositories.Instruction{
+			Step:        inst.Step,
+			Description: inst.Description,
+		}
+	}
+	return repoInstructions
+}
+
+func convertToRepoNutrition(modelNutrition models.Nutrition) repositories.Nutrition {
+	return repositories.Nutrition{
+		Calories: modelNutrition.Calories,
+		Protein:  modelNutrition.Protein,
+		Carbs:    modelNutrition.Carbs,
+		Fat:      modelNutrition.Fat,
+	}
+}
+
+// GetRecipe retrieves a single recipe by ID
+func (h *RecipeHandler) GetRecipe(c *gin.Context) {
+	// Get recipe ID from path
+	recipeID := c.Param("id")
+	if recipeID == "" {
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Recipe ID is required",
+		})
+		return
+	}
+
+	// Get user ID from context (set by auth middleware)
+	userID, exists := c.Get("currentUser")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, dtos.ErrorResponse{
+			Code:    "UNAUTHORIZED",
+			Message: "User ID not found in context",
+		})
+		return
+	}
+
+	// First try to get from Redis
+	cachedRecipe, err := h.recipeCache.GetRecipe(c.Request.Context(), recipeID)
+	if err == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"recipe": cachedRecipe.Current,
+			"status": "cached",
+		})
+		return
+	}
+
+	// If not in Redis, get from database with specific fields to avoid embedding scan issues
+	var recipe struct {
+		ID               string    `gorm:"column:id"`
+		Title            string    `gorm:"column:title"`
+		Description      string    `gorm:"column:description"`
+		Servings         int       `gorm:"column:servings"`
+		PrepTimeMinutes  int       `gorm:"column:prep_time_minutes"`
+		CookTimeMinutes  int       `gorm:"column:cook_time_minutes"`
+		TotalTimeMinutes int       `gorm:"column:total_time_minutes"`
+		Ingredients      []byte    `gorm:"column:ingredients"`
+		Instructions     []byte    `gorm:"column:instructions"`
+		Nutrition        []byte    `gorm:"column:nutrition"`
+		Tags             string    `gorm:"column:tags"`
+		Difficulty       string    `gorm:"column:difficulty"`
+		CreatedAt        time.Time `gorm:"column:created_at"`
+		UpdatedAt        time.Time `gorm:"column:updated_at"`
+	}
+
+	if err := h.db.Table("recipes").
+		Select("id, title, description, servings, prep_time_minutes, cook_time_minutes, total_time_minutes, ingredients, instructions, nutrition, tags, difficulty, created_at, updated_at").
+		Where("id = ? AND user_id = ?", recipeID, userID).
+		First(&recipe).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, dtos.ErrorResponse{
+				Code:    "NOT_FOUND",
+				Message: "Recipe not found",
+			})
+			return
+		}
+		log.Printf("Failed to get recipe from database: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "DATABASE_ERROR",
+			Message: "Failed to get recipe",
+		})
+		return
+	}
+
+	// Parse ingredients
+	var ingredients []models.Ingredient
+	if len(recipe.Ingredients) > 0 {
+		if err := json.Unmarshal(recipe.Ingredients, &ingredients); err != nil {
+			log.Printf("Failed to parse ingredients for recipe %s: %v\nRaw data: %s", recipe.ID, err, string(recipe.Ingredients))
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "DATABASE_ERROR",
+				Message: "Failed to parse recipe data",
+			})
+			return
+		}
+	}
+
+	// Parse instructions
+	var instructions []models.Instruction
+	if len(recipe.Instructions) > 0 {
+		if err := json.Unmarshal(recipe.Instructions, &instructions); err != nil {
+			log.Printf("Failed to parse instructions for recipe %s: %v\nRaw data: %s", recipe.ID, err, string(recipe.Instructions))
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "DATABASE_ERROR",
+				Message: "Failed to parse recipe data",
+			})
+			return
+		}
+	}
+
+	// Parse nutrition
+	var nutrition models.Nutrition
+	if len(recipe.Nutrition) > 0 {
+		if err := json.Unmarshal(recipe.Nutrition, &nutrition); err != nil {
+			log.Printf("Failed to parse nutrition for recipe %s: %v\nRaw data: %s", recipe.ID, err, string(recipe.Nutrition))
+			c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+				Code:    "DATABASE_ERROR",
+				Message: "Failed to parse recipe data",
+			})
+			return
+		}
+	}
+
+	// Parse tags from PostgreSQL array format
+	var tags []string
+	if recipe.Tags != "" {
+		// Remove the curly braces and split by comma
+		tagsStr := strings.Trim(recipe.Tags, "{}")
+		if tagsStr != "" {
+			// Split by comma and trim spaces
+			tagParts := strings.Split(tagsStr, ",")
+			tags = make([]string, len(tagParts))
+			for i, tag := range tagParts {
+				// Remove quotes if present and trim spaces
+				tag = strings.Trim(tag, "\" ")
+				tags[i] = tag
+			}
+		}
+	}
+
+	// Convert to repository type
+	repoRecipe := repositories.Recipe{
+		ID:               recipe.ID,
+		Title:            recipe.Title,
+		Description:      recipe.Description,
+		Servings:         recipe.Servings,
+		PrepTimeMinutes:  recipe.PrepTimeMinutes,
+		CookTimeMinutes:  recipe.CookTimeMinutes,
+		TotalTimeMinutes: recipe.TotalTimeMinutes,
+		Ingredients:      convertToRepoIngredients(ingredients),
+		Instructions:     convertToRepoInstructions(instructions),
+		Nutrition:        convertToRepoNutrition(nutrition),
+		Tags:             tags,
+		Difficulty:       recipe.Difficulty,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"recipe": repoRecipe,
+		"status": "database",
+	})
+}
+
+// ListRecipes retrieves a paginated list of recipes
+func (h *RecipeHandler) ListRecipes(c *gin.Context) {
+	// Get user ID from context (set by auth middleware)
+	userID, exists := c.Get("currentUser")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, dtos.ErrorResponse{
+			Code:    "UNAUTHORIZED",
+			Message: "User ID not found in context",
+		})
+		return
+	}
+
+	// Parse pagination parameters
+	page := c.DefaultQuery("page", "1")
+	limit := c.DefaultQuery("limit", "10")
+	pageNum, err := strconv.Atoi(page)
+	if err != nil || pageNum < 1 {
+		pageNum = 1
+	}
+	limitNum, err := strconv.Atoi(limit)
+	if err != nil || limitNum < 1 || limitNum > 100 {
+		limitNum = 10
+	}
+	offset := (pageNum - 1) * limitNum
+
+	// Get total count
+	var total int64
+	if err := h.db.Model(&models.Recipe{}).Where("user_id = ?", userID).Count(&total).Error; err != nil {
+		log.Printf("Failed to get recipe count: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "DATABASE_ERROR",
+			Message: "Failed to get recipe count",
+		})
+		return
+	}
+
+	// Get recipes from database with specific fields to avoid embedding scan issues
+	var recipes []struct {
+		ID               string    `gorm:"column:id"`
+		Title            string    `gorm:"column:title"`
+		Description      string    `gorm:"column:description"`
+		Servings         int       `gorm:"column:servings"`
+		PrepTimeMinutes  int       `gorm:"column:prep_time_minutes"`
+		CookTimeMinutes  int       `gorm:"column:cook_time_minutes"`
+		TotalTimeMinutes int       `gorm:"column:total_time_minutes"`
+		Ingredients      []byte    `gorm:"column:ingredients"`
+		Instructions     []byte    `gorm:"column:instructions"`
+		Nutrition        []byte    `gorm:"column:nutrition"`
+		Tags             string    `gorm:"column:tags"`
+		Difficulty       string    `gorm:"column:difficulty"`
+		CreatedAt        time.Time `gorm:"column:created_at"`
+		UpdatedAt        time.Time `gorm:"column:updated_at"`
+	}
+
+	if err := h.db.Table("recipes").
+		Select("id, title, description, servings, prep_time_minutes, cook_time_minutes, total_time_minutes, ingredients, instructions, nutrition, tags, difficulty, created_at, updated_at").
+		Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Limit(limitNum).
+		Offset(offset).
+		Find(&recipes).Error; err != nil {
+		log.Printf("Failed to get recipes from database: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "DATABASE_ERROR",
+			Message: "Failed to get recipes",
+		})
+		return
+	}
+
+	// Convert to repository types
+	repoRecipes := make([]repositories.Recipe, 0, len(recipes))
+	for _, recipe := range recipes {
+		// Parse ingredients
+		var ingredients []models.Ingredient
+		if len(recipe.Ingredients) > 0 {
+			if err := json.Unmarshal(recipe.Ingredients, &ingredients); err != nil {
+				log.Printf("Failed to parse ingredients for recipe %s: %v\nRaw data: %s", recipe.ID, err, string(recipe.Ingredients))
+				continue
+			}
+		}
+
+		// Parse instructions
+		var instructions []models.Instruction
+		if len(recipe.Instructions) > 0 {
+			if err := json.Unmarshal(recipe.Instructions, &instructions); err != nil {
+				log.Printf("Failed to parse instructions for recipe %s: %v\nRaw data: %s", recipe.ID, err, string(recipe.Instructions))
+				continue
+			}
+		}
+
+		// Parse nutrition
+		var nutrition models.Nutrition
+		if len(recipe.Nutrition) > 0 {
+			if err := json.Unmarshal(recipe.Nutrition, &nutrition); err != nil {
+				log.Printf("Failed to parse nutrition for recipe %s: %v\nRaw data: %s", recipe.ID, err, string(recipe.Nutrition))
+				continue
+			}
+		}
+
+		// Parse tags from PostgreSQL array format
+		var tags []string
+		if recipe.Tags != "" {
+			// Remove the curly braces and split by comma
+			tagsStr := strings.Trim(recipe.Tags, "{}")
+			if tagsStr != "" {
+				// Split by comma and trim spaces
+				tagParts := strings.Split(tagsStr, ",")
+				tags = make([]string, len(tagParts))
+				for i, tag := range tagParts {
+					// Remove quotes if present and trim spaces
+					tag = strings.Trim(tag, "\" ")
+					tags[i] = tag
+				}
+			}
+		}
+
+		repoRecipe := repositories.Recipe{
+			ID:               recipe.ID,
+			Title:            recipe.Title,
+			Description:      recipe.Description,
+			Servings:         recipe.Servings,
+			PrepTimeMinutes:  recipe.PrepTimeMinutes,
+			CookTimeMinutes:  recipe.CookTimeMinutes,
+			TotalTimeMinutes: recipe.TotalTimeMinutes,
+			Ingredients:      convertToRepoIngredients(ingredients),
+			Instructions:     convertToRepoInstructions(instructions),
+			Nutrition:        convertToRepoNutrition(nutrition),
+			Tags:             tags,
+			Difficulty:       recipe.Difficulty,
+		}
+
+		// Only add recipes that have at least some content
+		if repoRecipe.Title != "" || repoRecipe.Description != "" || len(repoRecipe.Ingredients) > 0 {
+			repoRecipes = append(repoRecipes, repoRecipe)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"recipes": repoRecipes,
+		"pagination": gin.H{
+			"total":  total,
+			"page":   pageNum,
+			"limit":  limitNum,
+			"pages":  int(math.Ceil(float64(total) / float64(limitNum))),
+			"offset": offset,
+		},
+	})
+}
+
+// ModifyRecipeWithAI handles the request to modify a recipe using AI
+func (h *RecipeHandler) ModifyRecipeWithAI(c *gin.Context) {
+	recipeID := c.Param("id")
+	if recipeID == "" {
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Recipe ID is required",
+		})
+		return
+	}
+
+	var req struct {
+		ModificationType string `json:"modification_type" binding:"required"`
+		AdditionalNotes  string `json:"additional_notes"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Invalid request body",
+		})
+		return
+	}
+
+	var recipe repositories.Recipe
+
+	// First try to get from Redis
+	cachedRecipe, err := h.recipeCache.GetRecipe(c.Request.Context(), recipeID)
+	if err == nil {
+		// Use the current version from the cache
+		recipe = cachedRecipe.Current
+	} else {
+		// If not in Redis, get from database
+		var dbRecipe models.Recipe
+		if err := h.db.First(&dbRecipe, recipeID).Error; err != nil {
+			c.JSON(http.StatusNotFound, dtos.ErrorResponse{
+				Code:    "NOT_FOUND",
+				Message: "Recipe not found",
+			})
+			return
+		}
+
+		// Convert to repository type
+		recipe = repositories.Recipe{
+			ID:               dbRecipe.ID,
+			Title:            dbRecipe.Title,
+			Description:      dbRecipe.Description,
+			Servings:         dbRecipe.Servings,
+			PrepTimeMinutes:  dbRecipe.PrepTimeMinutes,
+			CookTimeMinutes:  dbRecipe.CookTimeMinutes,
+			TotalTimeMinutes: dbRecipe.TotalTimeMinutes,
+			Ingredients:      convertToRepoIngredients(dbRecipe.Ingredients),
+			Instructions:     convertToRepoInstructions(dbRecipe.Instructions),
+			Nutrition:        convertToRepoNutrition(dbRecipe.Nutrition),
+			Tags:             dbRecipe.Tags,
+			Difficulty:       dbRecipe.Difficulty,
+		}
+	}
+
+	// Prepare the prompt for DeepSeek
+	prompt := fmt.Sprintf(`Modify the following recipe according to these requirements:
+Modification Type: %s
+Additional Notes: %s
+
+Original Recipe:
+Title: %s
+Description: %s
+Servings: %d
+Prep Time: %d minutes
+Cook Time: %d minutes
+Total Time: %d minutes
+Difficulty: %s
+
+Ingredients:
+%s
+
+Instructions:
+%s
+
+Nutrition:
+%s
+
+Tags: %s
+
+Please provide the modified recipe in the same format, maintaining the structure but updating the content according to the modification requirements.`,
+		req.ModificationType,
+		req.AdditionalNotes,
+		recipe.Title,
+		recipe.Description,
+		recipe.Servings,
+		recipe.PrepTimeMinutes,
+		recipe.CookTimeMinutes,
+		recipe.TotalTimeMinutes,
+		recipe.Difficulty,
+		formatIngredients(recipe.Ingredients),
+		formatInstructions(recipe.Instructions),
+		formatNutrition(recipe.Nutrition),
+		strings.Join(recipe.Tags, ", "))
+
+	// Call DeepSeek to modify the recipe
+	modifiedRecipePtr, err := h.deepseekClient.ModifyRecipe(c.Request.Context(), prompt)
+	if err != nil {
+		log.Printf("Failed to modify recipe with AI: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "AI_ERROR",
+			Message: "Failed to modify recipe with AI",
+		})
+		return
+	}
+
+	// Cache the modified recipe in Redis with modification count 0
+	tempID, err := h.recipeCache.CacheRecipe(c.Request.Context(), *modifiedRecipePtr)
+	if err != nil {
+		log.Printf("Failed to cache modified recipe in Redis: %v", err)
+		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
+			Code:    "INTERNAL_ERROR",
+			Message: "Failed to cache modified recipe",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"recipe_id": tempID,
+		"recipe":    *modifiedRecipePtr,
+		"status":    "ready_for_modification",
+	})
+}
+
+// Helper functions for formatting recipe components
+func formatIngredients(ingredients []repositories.Ingredient) string {
+	var sb strings.Builder
+	for _, ing := range ingredients {
+		sb.WriteString(fmt.Sprintf("- %s: %.1f %s\n", ing.Item, ing.Amount, ing.Unit))
+	}
+	return sb.String()
+}
+
+func formatInstructions(instructions []repositories.Instruction) string {
+	var sb strings.Builder
+	for _, inst := range instructions {
+		sb.WriteString(fmt.Sprintf("%d. %s\n", inst.Step, inst.Description))
+	}
+	return sb.String()
+}
+
+func formatNutrition(nutrition repositories.Nutrition) string {
+	return fmt.Sprintf("Calories: %d\nProtein: %s\nCarbs: %s\nFat: %s",
+		nutrition.Calories,
+		nutrition.Protein,
+		nutrition.Carbs,
+		nutrition.Fat)
 }

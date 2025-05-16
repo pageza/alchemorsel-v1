@@ -3,6 +3,7 @@ package routes
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/handlers"
@@ -13,6 +14,23 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
+
+// readSecretFile reads a secret from the Docker secrets directory
+func readSecretFile(secretName string) (string, error) {
+	// Try Docker secrets path first
+	dockerPath := "/run/secrets/" + secretName
+	data, err := os.ReadFile(dockerPath)
+	if err != nil {
+		// Fall back to local secrets directory
+		localPath := "./secrets/" + secretName + ".txt"
+		data, err = os.ReadFile(localPath)
+		if err != nil {
+			return "", err
+		}
+	}
+	// Remove any trailing newlines but preserve the rest of the content exactly
+	return strings.TrimRight(string(data), "\n\r"), nil
+}
 
 // SetupRouter initializes and returns the Gin router with all routes configured
 func SetupRouter(db *gorm.DB, logger *logging.Logger, redisClient *repositories.RedisClient) *gin.Engine {
@@ -80,7 +98,23 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger, redisClient *repositories.
 
 		// Initialize handlers
 		userHandler := handlers.NewUserHandler(userService)
-		recipeHandler := handlers.NewRecipeHandler(redisClient, db)
+
+		// Initialize DeepSeek client
+		deepseekKey, err := readSecretFile("deepseek_api_key")
+		if err != nil {
+			logger.Error("Failed to read DeepSeek API key", zap.Error(err))
+		}
+		deepseekURL, err := readSecretFile("deepseek_api_url")
+		if err != nil {
+			logger.Error("Failed to read DeepSeek API URL", zap.Error(err))
+		}
+		deepseekClient := repositories.NewDeepSeekClient(deepseekKey, deepseekURL)
+
+		// Initialize recipe cache with Redis client
+		recipeCache := repositories.NewRecipeCache(redisClient.GetClient())
+
+		// Initialize recipe handler with all required dependencies
+		recipeHandler := handlers.NewRecipeHandler(db, recipeCache, deepseekClient)
 
 		// Only add the rate limiter if DISABLE_RATE_LIMITER is not set to "true".
 		if os.Getenv("DISABLE_RATE_LIMITER") != "true" {
@@ -117,6 +151,12 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger, redisClient *repositories.
 			// Recipe endpoints
 			secured.POST("/recipes", recipeHandler.GenerateRecipe)
 			secured.POST("/recipes/:id/approve", recipeHandler.ApproveRecipe)
+			secured.POST("/recipes/:id/modify", recipeHandler.StartRecipeModification)
+			secured.POST("/recipes/:id/modify-with-ai", recipeHandler.ModifyRecipeWithAI)
+			secured.POST("/recipes/search", recipeHandler.SearchRecipes)
+			secured.PUT("/recipes/:id", recipeHandler.ModifyRecipe)
+			secured.GET("/recipes/:id", recipeHandler.GetRecipe)
+			secured.GET("/recipes", recipeHandler.ListRecipes)
 		}
 	}
 
