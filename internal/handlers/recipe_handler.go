@@ -16,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/dtos"
+	"github.com/pageza/alchemorsel-v1/internal/integrations"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"gorm.io/gorm"
@@ -462,7 +463,7 @@ func (h *RecipeHandler) ApproveRecipe(c *gin.Context) {
 	log.Printf("Getting embeddings for recipe: %s", cachedRecipe.Current.Title)
 
 	// Get embeddings from OpenAI
-	resp, err := h.deepseekClient.GetEmbeddings(
+	embedding, err := integrations.GenerateEmbedding(
 		c.Request.Context(),
 		embedText,
 	)
@@ -475,19 +476,10 @@ func (h *RecipeHandler) ApproveRecipe(c *gin.Context) {
 		return
 	}
 
-	if len(resp.Data) == 0 {
-		log.Printf("No embeddings returned from DeepSeek")
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
-			Code:    "EMBEDDING_ERROR",
-			Message: "No embeddings returned",
-		})
-		return
-	}
-
 	// Convert embeddings to []float32
-	embedding := make([]float32, len(resp.Data[0].Embedding))
-	for i, v := range resp.Data[0].Embedding {
-		embedding[i] = float32(v)
+	embeddingFloat32 := make([]float32, len(embedding))
+	for i, v := range embedding {
+		embeddingFloat32[i] = float32(v)
 	}
 
 	// Create recipe model
@@ -503,7 +495,7 @@ func (h *RecipeHandler) ApproveRecipe(c *gin.Context) {
 		Nutrition:        convertToModelNutrition(cachedRecipe.Current.Nutrition),
 		Tags:             cachedRecipe.Current.Tags,
 		Difficulty:       cachedRecipe.Current.Difficulty,
-		Embedding:        embedding,
+		Embedding:        embeddingFloat32,
 		UserID:           userID.(string),
 	}
 
@@ -582,8 +574,8 @@ func (h *RecipeHandler) SearchRecipes(c *gin.Context) {
 
 	log.Printf("Processing search query: %s", req.Query)
 
-	// Get embeddings for the search query
-	resp, err := h.deepseekClient.GetEmbeddings(
+	// Get embeddings for the search query from OpenAI
+	queryEmbedding, err := integrations.GenerateEmbedding(
 		c.Request.Context(),
 		req.Query,
 	)
@@ -596,19 +588,10 @@ func (h *RecipeHandler) SearchRecipes(c *gin.Context) {
 		return
 	}
 
-	if len(resp.Data) == 0 {
-		log.Printf("No embeddings returned from DeepSeek")
-		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
-			Code:    "EMBEDDING_ERROR",
-			Message: "No embeddings returned",
-		})
-		return
-	}
-
 	// Convert embeddings to []float32
-	queryEmbedding := make([]float32, len(resp.Data[0].Embedding))
-	for i, v := range resp.Data[0].Embedding {
-		queryEmbedding[i] = float32(v)
+	queryEmbeddingFloat32 := make([]float32, len(queryEmbedding))
+	for i, v := range queryEmbedding {
+		queryEmbeddingFloat32[i] = float32(v)
 	}
 
 	// First, try to find exact matches using text search
@@ -635,7 +618,7 @@ func (h *RecipeHandler) SearchRecipes(c *gin.Context) {
 		WHERE 1 - ((embedding->>'data')::float[]::vector <=> $1::float[]::vector) > 0.7
 		ORDER BY similarity DESC
 		LIMIT 5
-	`, queryEmbedding).Scan(&similarRecipes).Error; err != nil {
+	`, queryEmbeddingFloat32).Scan(&similarRecipes).Error; err != nil {
 		log.Printf("Failed to find similar recipes: %v", err)
 		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
 			Code:    "DATABASE_ERROR",
