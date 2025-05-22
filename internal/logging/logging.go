@@ -95,7 +95,7 @@ func NewLogger(config LogConfig) (*Logger, error) {
 
 	// Configure zap logger
 	zapCfg := zap.NewProductionConfig()
-	zapCfg.Level = zap.NewAtomicLevelAt(zap.DebugLevel) // Enable debug-level logging
+	zapCfg.Level = zap.NewAtomicLevelAt(zap.InfoLevel) // Change to InfoLevel instead of DebugLevel
 	encoderConfig := zapCfg.EncoderConfig
 	encoderConfig.TimeKey = "timestamp"
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -114,7 +114,7 @@ func NewLogger(config LogConfig) (*Logger, error) {
 		consoleCore := zapcore.NewCore(
 			encoder,
 			zapcore.AddSync(os.Stdout),
-			zap.NewAtomicLevelAt(zapcore.DebugLevel),
+			zap.NewAtomicLevelAt(zap.InfoLevel), // Change to InfoLevel
 		)
 		cores = append(cores, consoleCore)
 	}
@@ -124,7 +124,7 @@ func NewLogger(config LogConfig) (*Logger, error) {
 		fileCore := zapcore.NewCore(
 			encoder,
 			zapcore.AddSync(l.rotator),
-			zap.NewAtomicLevelAt(zapcore.DebugLevel),
+			zap.NewAtomicLevelAt(zap.InfoLevel), // Change to InfoLevel
 		)
 		cores = append(cores, fileCore)
 	}
@@ -140,6 +140,12 @@ func NewLogger(config LogConfig) (*Logger, error) {
 // RequestIDMiddleware adds request ID to context and logs
 func (l *Logger) RequestIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Skip logging for health check endpoint
+		if c.Request.URL.Path == "/v1/health" {
+			c.Next()
+			return
+		}
+
 		requestID := c.GetHeader(l.config.RequestIDHeader)
 		if requestID == "" {
 			requestID = uuid.New().String()
@@ -151,22 +157,42 @@ func (l *Logger) RequestIDMiddleware() gin.HandlerFunc {
 		// Store start time for duration calculation
 		startTime := time.Now()
 
-		// Log request start
-		l.Info("Request started",
-			zap.String("request_id", requestID),
-			zap.String("method", c.Request.Method),
-			zap.String("path", c.Request.URL.Path),
-			zap.String("ip", c.ClientIP()),
-		)
-
 		c.Next()
 
-		// Log request end with duration
-		l.Info("Request completed",
-			zap.String("request_id", requestID),
-			zap.Int("status", c.Writer.Status()),
-			zap.Duration("duration", time.Since(startTime)),
-		)
+		// Log important requests
+		status := c.Writer.Status()
+		duration := time.Since(startTime)
+		path := c.Request.URL.Path
+		method := c.Request.Method
+
+		// Always log frontend requests and important internal traffic
+		shouldLog := false
+
+		// Log all frontend requests (non-OPTIONS)
+		if method != "OPTIONS" {
+			shouldLog = true
+		}
+
+		// Log important internal traffic
+		if strings.Contains(path, "/recipes/") && (strings.Contains(path, "/approve") || strings.Contains(path, "/modify")) {
+			shouldLog = true
+		}
+
+		// Log errors regardless of path
+		if status >= 400 {
+			shouldLog = true
+		}
+
+		if shouldLog {
+			l.Info("Request completed",
+				zap.String("request_id", requestID),
+				zap.String("method", method),
+				zap.String("path", path),
+				zap.String("ip", c.ClientIP()),
+				zap.Int("status", status),
+				zap.Duration("duration", duration),
+			)
+		}
 	}
 }
 

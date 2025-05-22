@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -56,6 +54,7 @@ func InitializeDB(dsn string) error {
 	sqlDB.SetMaxIdleConns(1)
 	// Setting lifetime to 0 disables expiration of the connection.
 	sqlDB.SetConnMaxLifetime(0)
+
 	return nil
 }
 
@@ -84,54 +83,16 @@ func RunMigrations(db *gorm.DB) error {
 		}
 	}
 
-	// Drop existing tables using Migrator
-	if err := db.Migrator().DropTable(&models.Recipe{}, &models.User{}); err != nil {
-		return fmt.Errorf("failed to drop tables: %w", err)
-	}
-
-	// Create tables using Migrator
-	if err := db.Migrator().CreateTable(&models.User{}); err != nil {
-		return fmt.Errorf("failed to create users table: %w", err)
-	}
-
-	// Create recipes table with explicit column definitions
-	if err := db.Exec(`
-		CREATE TABLE recipes (
-			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-			title VARCHAR(255) NOT NULL,
-			description TEXT,
-			servings INTEGER,
-			prep_time_minutes INTEGER,
-			cook_time_minutes INTEGER,
-			total_time_minutes INTEGER,
-			ingredients JSONB,
-			instructions JSONB,
-			nutrition JSONB,
-			tags TEXT[],
-			difficulty VARCHAR(50),
-			embedding vector(1536),
-			created_at TIMESTAMP WITH TIME ZONE,
-			updated_at TIMESTAMP WITH TIME ZONE,
-			user_id UUID NOT NULL,
-			CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(id)
-		)
-	`).Error; err != nil {
-		return fmt.Errorf("failed to create recipes table: %w", err)
+	// Use the Recipe model from models package as the single source of truth
+	if err := db.AutoMigrate(&models.Recipe{}); err != nil {
+		return fmt.Errorf("failed to migrate recipes table: %w", err)
 	}
 
 	// Create vector similarity search index using GORM
 	if os.Getenv("DB_DRIVER") == "postgres" {
-		var indexExists bool
-		err := db.Raw("SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'recipe_embedding_idx')").Scan(&indexExists).Error
-		if err != nil {
-			return fmt.Errorf("failed to check if index exists: %w", err)
-		}
-
-		if !indexExists {
-			err = db.Exec("CREATE INDEX recipe_embedding_idx ON recipes USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)").Error
-			if err != nil {
-				return fmt.Errorf("failed to create vector similarity index: %w", err)
-			}
+		// Create the index using GORM's Exec
+		if err := db.Exec("CREATE INDEX IF NOT EXISTS recipe_embedding_idx ON recipes USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)").Error; err != nil {
+			return fmt.Errorf("failed to create vector similarity index: %w", err)
 		}
 	}
 

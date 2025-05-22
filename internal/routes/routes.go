@@ -74,12 +74,12 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger, redisClient *repositories.
 	}
 
 	logger.Info("Initializing Gin router...")
-	router := gin.Default()
+	router := gin.New()
 	// Disable trailing slash redirection to prevent 301 redirects on endpoints.
 	router.RedirectTrailingSlash = false
 	router.Use(gin.Recovery())
-	router.Use(gin.Logger())
 	router.Use(logger.RequestIDMiddleware())
+	router.Use(middleware.CORSMiddleware())
 
 	// Always add security headers unless explicitly disabled.
 	if os.Getenv("DISABLE_SECURITY_HEADERS") != "true" {

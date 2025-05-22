@@ -62,23 +62,24 @@ func (e *EmbeddingVector) Scan(value interface{}) error {
 	return nil
 }
 
+// Recipe represents a recipe in the database
 type Recipe struct {
-	ID               string          `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
-	Title            string          `gorm:"not null" json:"title"`
-	Description      string          `gorm:"type:text" json:"description"`
-	Servings         int             `json:"servings"`
-	PrepTimeMinutes  int             `json:"prep_time_minutes"`
-	CookTimeMinutes  int             `json:"cook_time_minutes"`
-	TotalTimeMinutes int             `json:"total_time_minutes"`
-	Ingredients      Ingredients     `gorm:"type:jsonb" json:"ingredients"`
-	Instructions     Instructions    `gorm:"type:jsonb" json:"instructions"`
-	Nutrition        Nutrition       `gorm:"type:jsonb" json:"nutrition"`
-	Tags             pq.StringArray  `gorm:"type:text[]" json:"tags"`
-	Difficulty       string          `json:"difficulty"`
-	Embedding        EmbeddingVector `gorm:"type:vector(1536)" json:"-"` // Ada-2 embeddings are 1536 dimensions
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
-	UserID           string          `gorm:"type:uuid;not null" json:"user_id"`
+	ID               string        `json:"id" gorm:"primaryKey"`
+	Title            string        `json:"title"`
+	Description      string        `json:"description"`
+	Servings         int           `json:"servings"`
+	PrepTimeMinutes  int           `json:"prep_time_minutes"`
+	CookTimeMinutes  int           `json:"cook_time_minutes"`
+	TotalTimeMinutes int           `json:"total_time_minutes"`
+	Ingredients      []Ingredient  `json:"ingredients" gorm:"type:jsonb"`
+	Instructions     []Instruction `json:"instructions" gorm:"type:jsonb"`
+	Nutrition        Nutrition     `json:"nutrition" gorm:"type:jsonb"`
+	Tags             []string      `json:"tags" gorm:"type:text[]"`
+	Difficulty       string        `json:"difficulty"`
+	Embedding        []float32     `json:"-" gorm:"type:vector(1536)"`
+	UserID           string        `json:"user_id"`
+	CreatedAt        time.Time     `json:"created_at"`
+	UpdatedAt        time.Time     `json:"updated_at"`
 }
 
 // Value implements the driver.Valuer interface for Recipe

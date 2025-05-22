@@ -24,96 +24,87 @@ func NewRecipeCache(client *redis.Client) *RecipeCache {
 
 // CachedRecipe represents a recipe stored in Redis with version history
 type CachedRecipe struct {
-	Original          Recipe    `json:"original"`
-	Versions          []Recipe  `json:"versions"`
-	Current           Recipe    `json:"current"`
-	ModificationCount int       `json:"modification_count"`
-	Timestamp         time.Time `json:"timestamp"`
+	Original          Recipe `json:"original"`
+	Current           Recipe `json:"current"`
+	ModificationCount int    `json:"modification_count"`
+	LastModified      int64  `json:"last_modified"`
 }
 
-// CacheRecipe stores a recipe in Redis with a temporary ID
-func (rc *RecipeCache) CacheRecipe(ctx context.Context, recipe Recipe) (string, error) {
-	// Generate a temporary ID for the recipe
-	tempID := uuid.New().String()
+// CacheRecipe stores a recipe in Redis with a UUID
+func (c *RecipeCache) CacheRecipe(ctx context.Context, recipe Recipe) (string, error) {
+	// Generate UUID for the recipe
+	recipeID := uuid.New().String()
 
-	// Create the cache structure
-	cache := CachedRecipe{
+	// Set the ID in both original and current recipe objects
+	recipe.ID = recipeID
+
+	cachedRecipe := CachedRecipe{
 		Original:          recipe,
-		Versions:          []Recipe{},
 		Current:           recipe,
 		ModificationCount: 0,
-		Timestamp:         time.Now(),
+		LastModified:      time.Now().Unix(),
 	}
 
-	// Convert to JSON
-	cacheJSON, err := json.Marshal(cache)
+	data, err := json.Marshal(cachedRecipe)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal recipe cache: %v", err)
+		return "", fmt.Errorf("failed to marshal recipe: %v", err)
 	}
 
-	// Store in Redis with 1 hour expiration
-	key := fmt.Sprintf("recipe:%s", tempID)
-	if err := rc.client.Set(ctx, key, cacheJSON, time.Hour).Err(); err != nil {
+	key := fmt.Sprintf("recipe:%s", recipeID)
+	if err := c.client.Set(ctx, key, data, 1*time.Hour).Err(); err != nil {
 		return "", fmt.Errorf("failed to cache recipe: %v", err)
 	}
 
-	return tempID, nil
+	return recipeID, nil
 }
 
-// GetRecipe retrieves a recipe from Redis by its temporary ID
-func (rc *RecipeCache) GetRecipe(ctx context.Context, tempID string) (*CachedRecipe, error) {
-	key := fmt.Sprintf("recipe:%s", tempID)
-
-	// Get from Redis
-	val, err := rc.client.Get(ctx, key).Result()
-	if err == redis.Nil {
-		return nil, fmt.Errorf("recipe not found")
-	} else if err != nil {
+// GetRecipe retrieves a recipe from Redis by its UUID
+func (c *RecipeCache) GetRecipe(ctx context.Context, recipeID string) (*CachedRecipe, error) {
+	key := fmt.Sprintf("recipe:%s", recipeID)
+	data, err := c.client.Get(ctx, key).Bytes()
+	if err != nil {
 		return nil, fmt.Errorf("failed to get recipe from cache: %v", err)
 	}
 
-	// Parse JSON
-	var cache CachedRecipe
-	if err := json.Unmarshal([]byte(val), &cache); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal recipe cache: %v", err)
+	var cachedRecipe CachedRecipe
+	if err := json.Unmarshal(data, &cachedRecipe); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal recipe: %v", err)
 	}
 
-	return &cache, nil
+	return &cachedRecipe, nil
 }
 
-// UpdateRecipe updates a cached recipe with a new version
-func (rc *RecipeCache) UpdateRecipe(ctx context.Context, tempID string, newVersion Recipe) error {
-	// Get existing cache
-	cache, err := rc.GetRecipe(ctx, tempID)
+// UpdateRecipe updates a recipe in Redis by its UUID
+func (c *RecipeCache) UpdateRecipe(ctx context.Context, recipeID string, updatedRecipe Recipe) error {
+	cachedRecipe, err := c.GetRecipe(ctx, recipeID)
 	if err != nil {
 		return err
 	}
 
-	// Add current version to history
-	cache.Versions = append(cache.Versions, cache.Current)
-	cache.Current = newVersion
-	cache.ModificationCount++
-	cache.Timestamp = time.Now()
+	// Ensure the ID is preserved
+	updatedRecipe.ID = recipeID
 
-	// Convert to JSON
-	cacheJSON, err := json.Marshal(cache)
+	cachedRecipe.Current = updatedRecipe
+	cachedRecipe.ModificationCount++
+	cachedRecipe.LastModified = time.Now().Unix()
+
+	data, err := json.Marshal(cachedRecipe)
 	if err != nil {
-		return fmt.Errorf("failed to marshal updated recipe cache: %v", err)
+		return fmt.Errorf("failed to marshal updated recipe: %v", err)
 	}
 
-	// Store back in Redis, maintaining the original TTL
-	key := fmt.Sprintf("recipe:%s", tempID)
-	if err := rc.client.Set(ctx, key, cacheJSON, time.Hour).Err(); err != nil {
-		return fmt.Errorf("failed to update recipe cache: %v", err)
+	key := fmt.Sprintf("recipe:%s", recipeID)
+	if err := c.client.Set(ctx, key, data, 1*time.Hour).Err(); err != nil {
+		return fmt.Errorf("failed to update recipe in cache: %v", err)
 	}
 
 	return nil
 }
 
-// DeleteRecipe removes a recipe from Redis
-func (rc *RecipeCache) DeleteRecipe(ctx context.Context, tempID string) error {
-	key := fmt.Sprintf("recipe:%s", tempID)
-	if err := rc.client.Del(ctx, key).Err(); err != nil {
+// DeleteRecipe removes a recipe from Redis by its UUID
+func (c *RecipeCache) DeleteRecipe(ctx context.Context, recipeID string) error {
+	key := fmt.Sprintf("recipe:%s", recipeID)
+	if err := c.client.Del(ctx, key).Err(); err != nil {
 		return fmt.Errorf("failed to delete recipe from cache: %v", err)
 	}
 	return nil
