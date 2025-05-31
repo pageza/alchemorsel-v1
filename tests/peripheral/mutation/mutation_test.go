@@ -76,6 +76,18 @@ func (s *MutationTestSuite) MutateCode(source string) (string, error) {
 			case token.LSS:
 				x.Op = token.GTR
 				x.OpPos = 0
+			case token.EQL:
+				x.Op = token.NEQ
+				x.OpPos = 0
+			case token.NEQ:
+				x.Op = token.EQL
+				x.OpPos = 0
+			case token.GEQ:
+				x.Op = token.LEQ
+				x.OpPos = 0
+			case token.LEQ:
+				x.Op = token.GEQ
+				x.OpPos = 0
 			}
 		case *ast.Ident:
 			// Mutate boolean literals
@@ -83,6 +95,19 @@ func (s *MutationTestSuite) MutateCode(source string) (string, error) {
 				x.Name = "false"
 			} else if x.Name == "false" {
 				x.Name = "true"
+			}
+		case *ast.IfStmt:
+			if binExpr, ok := x.Cond.(*ast.BinaryExpr); ok {
+				switch binExpr.Op {
+				case token.EQL:
+					binExpr.Op = token.NEQ
+				case token.NEQ:
+					binExpr.Op = token.EQL
+				case token.GTR:
+					binExpr.Op = token.LEQ
+				case token.LSS:
+					binExpr.Op = token.GEQ
+				}
 			}
 		}
 		return true
@@ -112,7 +137,7 @@ func (s *MutationTestSuite) CalculateCoverage(t *testing.T) float64 {
 // It verifies that the mutation testing system can effectively
 // detect changes to arithmetic operators.
 func TestMutation_Operators(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 	suite := NewMutationTestSuite(logger)
 
@@ -132,7 +157,7 @@ func add(a, b int) int {
 // It verifies that the mutation testing system can effectively
 // detect changes to logical conditions.
 func TestMutation_Conditions(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 	suite := NewMutationTestSuite(logger)
 
@@ -152,7 +177,7 @@ func isPositive(n int) bool {
 // It verifies that the test suite has sufficient coverage to
 // effectively detect code mutations.
 func TestMutation_TestCoverage(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 	suite := NewMutationTestSuite(logger)
 
@@ -164,7 +189,7 @@ func TestMutation_TestCoverage(t *testing.T) {
 // The mutation score indicates how effective the test suite is at
 // detecting artificial bugs introduced through mutations.
 func TestMutation_Score(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 	suite := NewMutationTestSuite(logger)
 
@@ -186,7 +211,7 @@ func TestMutation_Score(t *testing.T) {
 // It verifies that the mutation testing system works correctly with
 // actual test cases and can detect code changes.
 func TestMutation_Integration(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 	suite := NewMutationTestSuite(logger)
 
@@ -221,10 +246,14 @@ func TestAdd(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mutated, err := suite.MutateCode(tc.source)
 			assert.NoError(t, err)
-
-			// In practice, you would run the tests against the mutated code
-			// and verify that they fail (kill the mutation)
 			assert.NotEqual(t, tc.source, mutated, "Code should be mutated")
+			
+			// Verify the mutation actually changed the logic
+			assert.Contains(t, mutated, "mutated", "Mutation marker should be present")
+			
+			// 2. Run the test suite against the mutated code
+			// 3. Verify that tests fail (kill the mutation)
+			// 4. Calculate mutation score based on killed vs survived mutations
 		})
 	}
 }

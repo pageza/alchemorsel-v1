@@ -4,9 +4,15 @@
 package performance
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/pageza/alchemorsel-v1/internal/models"
+	"github.com/pageza/alchemorsel-v1/internal/repositories"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -77,7 +83,7 @@ func (s *PerformanceTestSuite) ValidateMetrics(t *testing.T) {
 // It measures response times, throughput, and error rates for database operations
 // and API endpoints, validating them against predefined thresholds.
 func TestPerformance_BasicOperations(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 	suite := NewPerformanceTestSuite(logger)
 
@@ -89,11 +95,33 @@ func TestPerformance_BasicOperations(t *testing.T) {
 	// Test database operations
 	t.Run("DatabaseOperations", func(t *testing.T) {
 		start := time.Now()
-		// Perform database operations here
+		
+		user := &models.User{
+			Name:     "Performance Test User",
+			Email:    fmt.Sprintf("perf-test-%d@example.com", time.Now().UnixNano()),
+			Password: "testpassword123",
+		}
+		
+		err := repositories.CreateUser(context.Background(), user)
+		errorRate := 0.0
+		if err != nil {
+			errorRate = 1.0
+		}
+		
+		if user.ID != "" {
+			_, err = repositories.GetUserByID(context.Background(), user.ID)
+			if err != nil {
+				errorRate += 0.5
+			}
+			
+			repositories.DeleteUser(context.Background(), user.ID)
+		}
+		
+		duration := time.Since(start)
 		metrics := &PerformanceMetrics{
-			ResponseTime: time.Since(start),
-			Throughput:   1500,
-			ErrorRate:    0.005,
+			ResponseTime: duration,
+			Throughput:   int64(1.0 / duration.Seconds()),
+			ErrorRate:    errorRate,
 		}
 		suite.RecordMetrics("DatabaseOperations", metrics)
 	})
@@ -101,11 +129,23 @@ func TestPerformance_BasicOperations(t *testing.T) {
 	// Test API endpoints
 	t.Run("APIEndpoints", func(t *testing.T) {
 		start := time.Now()
-		// Perform API calls here
+		
+		resp, err := http.Get("http://localhost:8080/api/health")
+		errorRate := 0.0
+		if err != nil {
+			errorRate = 1.0
+		} else {
+			if resp.StatusCode != 200 {
+				errorRate = 0.5
+			}
+			resp.Body.Close()
+		}
+		
+		duration := time.Since(start)
 		metrics := &PerformanceMetrics{
-			ResponseTime: time.Since(start),
-			Throughput:   2000,
-			ErrorRate:    0.003,
+			ResponseTime: duration,
+			Throughput:   int64(1.0 / duration.Seconds()),
+			ErrorRate:    errorRate,
 		}
 		suite.RecordMetrics("APIEndpoints", metrics)
 	})
@@ -117,18 +157,39 @@ func TestPerformance_BasicOperations(t *testing.T) {
 // BenchmarkDatabaseOperations benchmarks database operations for performance.
 // It measures the performance of insert and select operations under various conditions.
 func BenchmarkDatabaseOperations(b *testing.B) {
-	b.Skip("Temporarily disabled for MVP")
 	b.Run("Insert", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			// Perform insert operation
+			user := &models.User{
+				Name:     fmt.Sprintf("Benchmark User %d", i),
+				Email:    fmt.Sprintf("bench-user-%d@example.com", i),
+				Password: "benchmarkpassword123",
+			}
+			
+			repositories.CreateUser(context.Background(), user)
+			if user.ID != "" {
+				repositories.DeleteUser(context.Background(), user.ID)
+			}
 		}
 	})
 
 	b.Run("Select", func(b *testing.B) {
+		user := &models.User{
+			Name:     "Benchmark Select User",
+			Email:    "bench-select@example.com",
+			Password: "benchmarkpassword123",
+		}
+		repositories.CreateUser(context.Background(), user)
+		
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			// Perform select operation
+			if user.ID != "" {
+				repositories.GetUserByID(context.Background(), user.ID)
+			}
+		}
+		
+		if user.ID != "" {
+			repositories.DeleteUser(context.Background(), user.ID)
 		}
 	})
 }
@@ -137,7 +198,7 @@ func BenchmarkDatabaseOperations(b *testing.B) {
 // It simulates various concurrent user loads and measures system performance
 // to ensure it meets performance requirements under different scenarios.
 func TestLoadScenarios(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 	suite := NewPerformanceTestSuite(logger)
 
@@ -155,11 +216,26 @@ func TestLoadScenarios(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			start := time.Now()
-			// Simulate load with concurrent users
+			
+			var wg sync.WaitGroup
+			for i := 0; i < tc.concurrentUsers; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					resp, err := http.Get("http://localhost:8080/api/health")
+					if err == nil && resp != nil {
+						resp.Body.Close()
+					}
+				}()
+			}
+			wg.Wait()
+			
+			duration := time.Since(start)
 			metrics := &PerformanceMetrics{
-				ResponseTime:    time.Since(start),
-				Throughput:      tc.expectedTPS,
+				ResponseTime:    duration,
+				Throughput:      int64(float64(tc.concurrentUsers) / duration.Seconds()),
 				ConcurrentUsers: tc.concurrentUsers,
+				ErrorRate:       0.0,
 			}
 			suite.RecordMetrics(tc.name, metrics)
 		})

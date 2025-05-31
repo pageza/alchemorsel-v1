@@ -143,7 +143,7 @@ func (s *SecurityTestSuite) CheckXSSVulnerabilities(t *testing.T, endpoint strin
 // TestSecurity_Headers tests the presence and configuration of security headers.
 // It verifies that all required security headers are properly set and configured.
 func TestSecurity_Headers(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	router := gin.New()
 	router.Use(middleware.SecurityHeaders())
 	router.GET("/test", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
@@ -158,7 +158,7 @@ func TestSecurity_Headers(t *testing.T) {
 // TestSecurity_SSL tests the SSL/TLS configuration of the target server.
 // It verifies that the server uses secure TLS versions and proper cipher suites.
 func TestSecurity_SSL(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	router := gin.New()
 	router.Use(middleware.SecurityHeaders())
 	router.GET("/test", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
@@ -175,7 +175,7 @@ func TestSecurity_SSL(t *testing.T) {
 // It verifies that the system properly handles and sanitizes input to prevent
 // SQL injection attacks.
 func TestSecurity_SQLInjection(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	router := gin.New()
 	router.Use(middleware.SecurityHeaders())
 	router.GET("/api/users", func(c *gin.Context) { c.Status(http.StatusOK) })
@@ -191,7 +191,7 @@ func TestSecurity_SQLInjection(t *testing.T) {
 // It verifies that the system properly escapes and sanitizes output to prevent
 // XSS attacks.
 func TestSecurity_XSS(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	router := gin.New()
 	router.Use(middleware.SecurityHeaders())
 	router.GET("/api/search", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
@@ -207,7 +207,7 @@ func TestSecurity_XSS(t *testing.T) {
 // It verifies that the system enforces strong password requirements and proper
 // authentication practices.
 func TestSecurity_Authentication(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	router := gin.New()
 	router.Use(middleware.SecurityHeaders())
 	router.GET("/auth", func(c *gin.Context) { c.String(http.StatusOK, "ok") })

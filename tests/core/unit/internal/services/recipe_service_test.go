@@ -2,12 +2,14 @@ package unit
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/services"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 // Mock services
@@ -494,4 +496,93 @@ func TestDeleteRecipe(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRecipeService_EdgeCases(t *testing.T) {
+	mockRepo := new(MockRecipeRepository)
+	service := services.NewRecipeService(mockRepo)
+
+	t.Run("SaveRecipe_NilRecipe", func(t *testing.T) {
+		err := service.SaveRecipe(context.Background(), nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "recipe cannot be nil")
+	})
+
+	t.Run("SaveRecipe_EmptyTitle", func(t *testing.T) {
+		recipe := &models.Recipe{
+			Title: "",
+			Instructions: []models.Instruction{
+				{StepNumber: 1, Description: "Test instruction"},
+			},
+		}
+		
+		err := service.SaveRecipe(context.Background(), recipe)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "title is required")
+	})
+
+	t.Run("SaveRecipe_EmptyInstructions", func(t *testing.T) {
+		recipe := &models.Recipe{
+			Title:        "Test Recipe",
+			Instructions: []models.Instruction{},
+		}
+		
+		err := service.SaveRecipe(context.Background(), recipe)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "instructions are required")
+	})
+
+	t.Run("GetRecipe_InvalidUUID", func(t *testing.T) {
+		_, err := service.GetRecipe(context.Background(), "invalid-uuid")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid UUID")
+	})
+
+	t.Run("UpdateRecipe_NonExistentRecipe", func(t *testing.T) {
+		recipe := &models.Recipe{
+			ID:    "550e8400-e29b-41d4-a716-446655440000",
+			Title: "Updated Recipe",
+			Instructions: []models.Instruction{
+				{StepNumber: 1, Description: "Updated instruction"},
+			},
+		}
+
+		mockRepo.On("GetRecipe", mock.Anything, recipe.ID).Return(nil, fmt.Errorf("recipe not found"))
+
+		err := service.UpdateRecipe(context.Background(), recipe)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "recipe not found")
+	})
+
+	t.Run("DeleteRecipe_InvalidUUID", func(t *testing.T) {
+		err := service.DeleteRecipe(context.Background(), "invalid-uuid")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid UUID")
+	})
+
+	t.Run("SearchRecipes_EmptyQuery", func(t *testing.T) {
+		recipes, err := service.SearchRecipes(context.Background(), "")
+		assert.NoError(t, err)
+		assert.Empty(t, recipes)
+	})
+
+	t.Run("SaveRecipe_LargeRecipeData", func(t *testing.T) {
+		largeInstructions := make([]models.Instruction, 1000)
+		for i := 0; i < 1000; i++ {
+			largeInstructions[i] = models.Instruction{
+				StepNumber:  i + 1,
+				Description: fmt.Sprintf("Very long instruction text %d", i),
+			}
+		}
+
+		recipe := &models.Recipe{
+			Title:        "Large Recipe",
+			Instructions: largeInstructions,
+		}
+
+		mockRepo.On("SaveRecipe", mock.Anything, recipe).Return(nil)
+
+		err := service.SaveRecipe(context.Background(), recipe)
+		assert.NoError(t, err)
+	})
 }
