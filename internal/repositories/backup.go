@@ -32,16 +32,16 @@ func CreateBackup(config *BackupConfig) error {
 
 	// Create backup using pg_dump
 	cmd := exec.Command("pg_dump",
-		"-h", "localhost", // TODO: Get from config
-		"-U", "postgres", // TODO: Get from config
-		"-d", "alchemorsel", // TODO: Get from config
-		"-F", "c", // Custom format for compression
+		"-h", getEnvOrDefault("POSTGRES_HOST", "localhost"),
+		"-U", getEnvOrDefault("POSTGRES_USER", "postgres"),
+		"-d", getEnvOrDefault("POSTGRES_DB", "alchemorsel"),
+		"-F", "c",
 		"-f", backupFile,
 	)
 
 	// Set environment variables for authentication
 	cmd.Env = append(os.Environ(),
-		"PGPASSWORD=testpass", // TODO: Get from config
+		"PGPASSWORD="+getEnvOrDefault("POSTGRES_PASSWORD", "testpass"),
 	)
 
 	// Execute backup command
@@ -65,16 +65,16 @@ func RestoreBackup(backupFile string) error {
 
 	// Restore backup using pg_restore
 	cmd := exec.Command("pg_restore",
-		"-h", "localhost", // TODO: Get from config
-		"-U", "postgres", // TODO: Get from config
-		"-d", "alchemorsel", // TODO: Get from config
-		"-c", // Clean (drop) database objects before recreating
+		"-h", getEnvOrDefault("POSTGRES_HOST", "localhost"),
+		"-U", getEnvOrDefault("POSTGRES_USER", "postgres"),
+		"-d", getEnvOrDefault("POSTGRES_DB", "alchemorsel"),
+		"-c",
 		backupFile,
 	)
 
 	// Set environment variables for authentication
 	cmd.Env = append(os.Environ(),
-		"PGPASSWORD=testpass", // TODO: Get from config
+		"PGPASSWORD="+getEnvOrDefault("POSTGRES_PASSWORD", "testpass"),
 	)
 
 	// Execute restore command
@@ -125,6 +125,13 @@ func CleanupOldBackups(config *BackupConfig) error {
 	}
 
 	return nil
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 // StartBackupScheduler starts the backup scheduler

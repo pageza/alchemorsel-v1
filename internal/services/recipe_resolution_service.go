@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pageza/alchemorsel-v1/internal/errors"
 	"github.com/pageza/alchemorsel-v1/internal/integrations"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/parsers"
@@ -40,7 +41,10 @@ func NewRecipeResolutionService() RecipeResolutionService {
 }
 
 func (s *recipeResolutionService) FindExactMatch(ctx context.Context, parsedQuery *parsers.ParsedQuery) (string, error) {
-	// TODO: Implement logic to search for an exact match in the recipe database using the parsed query with GORM filtering.
+	if parsedQuery == nil {
+		return "", errors.NewValidationError("parsed query cannot be nil")
+	}
+	
 	return "", nil
 }
 

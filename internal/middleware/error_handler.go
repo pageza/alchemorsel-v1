@@ -1,16 +1,15 @@
 package middleware
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
+	"github.com/pageza/alchemorsel-v1/internal/dtos"
 	"github.com/pageza/alchemorsel-v1/internal/errors"
 	"go.uber.org/zap"
 )
 
-// ErrorResponse represents the structure of error responses
-type ErrorResponse struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
+
 
 // ErrorHandler middleware handles errors consistently across the application
 func ErrorHandler(logger *zap.Logger) gin.HandlerFunc {
@@ -30,14 +29,14 @@ func ErrorHandler(logger *zap.Logger) gin.HandlerFunc {
 				zap.String("remote_addr", c.ClientIP()),
 			)
 
-			// Create error response
-			response := ErrorResponse{
-				Code:    getErrorCode(c.Writer.Status()),
-				Message: err.Error(),
-			}
+		// Create error response
+		response := dtos.ErrorResponse{
+			Code:    getErrorCode(c.Writer.Status()),
+			Message: err.Error(),
+		}
 
-			// Send response
-			c.JSON(c.Writer.Status(), response)
+		// Send response
+		c.JSON(c.Writer.Status(), response)
 		}
 	}
 }

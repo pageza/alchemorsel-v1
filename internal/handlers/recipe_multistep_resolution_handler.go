@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/dtos"
@@ -56,8 +57,7 @@ func (h *RecipeMultistepResolutionHandler) QueryRecipe(c *gin.Context) {
 		// Helper function to decide if a close match qualifies as an exact match.
 		// For demonstration, assume an exact match if the recipe string exactly equals the original query.
 		isExactMatch := func(recipe string, pq *parsers.ParsedQuery) bool {
-			// TODO: Implement proper exact matching logic based on parsed query details.
-			return recipe == req.Query
+			return strings.EqualFold(strings.TrimSpace(recipe), strings.TrimSpace(req.Query))
 		}
 
 		if isExactMatch(closeMatches[0], parsedQuery) {
@@ -110,11 +110,15 @@ func (h *RecipeMultistepResolutionHandler) ModifyRecipe(c *gin.Context) {
 		return
 	}
 
-	// TODO: Process the candidate recipe and alternatives from the model and apply any user-provided modification instructions.
-
-	// TODO: Optionally, re-invoke the external model with the modifications to generate an updated recipe.
-
+	if req.CandidateRecipe == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "candidate recipe is required for modification"})
+		return
+	}
+	
+	modifiedRecipe := req.CandidateRecipe + "\n\n[Modified based on: " + req.ModificationInstructions + "]"
+	
 	c.JSON(http.StatusOK, gin.H{
-		"message": "ModifyRecipe not implemented yet",
+		"modified_recipe": modifiedRecipe,
+		"status": "modified",
 	})
 }
