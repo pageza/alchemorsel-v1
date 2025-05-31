@@ -15,9 +15,7 @@ import (
 )
 
 func main() {
-	// DEBUG: Log JWT_SECRET from environment for CI debugging
-	jwtSecret := os.Getenv("JWT_SECRET")
-	log.Printf("DEBUG: JWT_SECRET inside app: %s", jwtSecret)
+
 
 	// Initialize logger with console-only output
 	logConfig := logging.LogConfig{
@@ -51,9 +49,7 @@ func main() {
 		logger.Fatal("Error creating configuration", zap.Error(err))
 	}
 
-	// Log the JWT_SECRET value from the environment for debugging
-	rawJWT := os.Getenv("JWT_SECRET")
-	logger.Info("APP JWT_SECRET details", zap.String("raw_value", rawJWT), zap.Int("length", len(rawJWT)))
+
 
 	dsn := cfg.GetDSN()
 	logger.Info("DSN constructed", zap.String("DSN", dsn))

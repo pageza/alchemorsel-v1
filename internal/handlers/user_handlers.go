@@ -72,7 +72,6 @@ func (h *UserHandler) LoginUser(c *gin.Context) {
 
 	// Ensure a JWT secret is set.
 	secret := os.Getenv("JWT_SECRET")
-	log.Printf("DEBUG: user_handlers JWT_SECRET value: %s", secret)
 	if secret == "" {
 		zap.S().Error("JWT secret not set")
 		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
@@ -196,9 +195,6 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	zap.S().Debugw("Validating user fields", "user", user)
 	// (Validation happens here via validateUserFields call)
 	zap.S().Debugw("User fields validated", "user", user)
-	zap.S().Debugw("Calling CreateUser service", "user", user)
-	zap.S().Infow("Attempting to create user", "user", user)
-
 	if err := h.Service.CreateUser(c.Request.Context(), &user); err != nil {
 		zap.S().Errorw("CreateUser service error", "error", err, "user", user)
 		if strings.Contains(err.Error(), "already exists") {
@@ -403,8 +399,7 @@ func (h *UserHandler) UpdateCurrentUser(c *gin.Context) {
 
 // Updated PatchCurrentUser with extensive logging
 func (h *UserHandler) PatchCurrentUser(c *gin.Context) {
-	// TRACE: entering the endpoint
-	zap.S().Debug("TRACE: Entering PatchCurrentUser endpoint.")
+
 	zap.S().Debugw("PATCH /v1/users/me endpoint hit", "path", c.Request.URL.Path, "method", c.Request.Method)
 
 	var patchData map[string]interface{}
@@ -415,8 +410,7 @@ func (h *UserHandler) PatchCurrentUser(c *gin.Context) {
 		})
 		return
 	}
-	// TRACE: JSON payload successfully bound
-	zap.S().Debugw("TRACE: JSON payload bound", "patchData", patchData)
+
 
 	// Existing logs for received payload
 	zap.S().Infow("PatchCurrentUser: Received patch data", "patchData", patchData)
@@ -447,8 +441,7 @@ func (h *UserHandler) PatchCurrentUser(c *gin.Context) {
 		}
 	}
 
-	// TRACE: call service layer to patch the user
-	zap.S().Debug("TRACE: Calling PatchUser service from handler.")
+
 	if err := h.Service.PatchUser(c.Request.Context(), userID, patchData); err != nil {
 		zap.S().Errorw("PatchCurrentUser: PatchUser service call failed", "userID", userID, "error", err)
 		c.JSON(http.StatusInternalServerError, dtos.ErrorResponse{
@@ -457,8 +450,7 @@ func (h *UserHandler) PatchCurrentUser(c *gin.Context) {
 		})
 		return
 	}
-	// TRACE: successfully returned from service layer
-	zap.S().Debug("TRACE: PatchUser service call completed successfully.")
+
 
 	// Retrieve the updated user
 	user, err := h.Service.GetUser(c.Request.Context(), userID)
@@ -470,8 +462,7 @@ func (h *UserHandler) PatchCurrentUser(c *gin.Context) {
 		return
 	}
 
-	// TRACE: exiting endpoint with updated user
-	zap.S().Debugw("TRACE: Exiting PatchCurrentUser endpoint with updated user", "userID", userID, "updatedUser", user)
+
 
 	c.JSON(http.StatusOK, gin.H{
 		"name":  user.Name,

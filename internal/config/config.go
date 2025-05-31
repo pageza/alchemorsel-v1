@@ -135,11 +135,8 @@ func (c *Config) loadFromEnv() error {
 
 	// JWT configuration
 	c.JWT.Secret = getEnvOrDefault("JWT_SECRET", "default-super-long-ci-secret-key-123456")
-	log.Printf("Loaded JWT_SECRET length: %d", len(c.JWT.Secret))
-	log.Printf("DEBUG: Config JWT_SECRET value: %s", c.JWT.Secret)
 	c.JWT.ExpirationHours = getEnvIntOrDefault("JWT_EXPIRATION_HOURS", 24)
 	c.JWT.RefreshHours = getEnvIntOrDefault("JWT_REFRESH_HOURS", 168)
-	log.Printf("Loaded DB configuration: Host=%s, Port=%d, DBName=%s", c.Database.Host, c.Database.Port, c.Database.DBName)
 
 	// Email configuration
 	c.Email.Host = getEnvOrDefault("EMAIL_HOST", "smtp.gmail.com")
@@ -253,9 +250,6 @@ func (c *Config) getSQLiteDSN() string {
 // Helper functions for environment variables
 func getEnvOrDefault(key, defaultValue string) string {
 	value := os.Getenv(key)
-	if key == "JWT_SECRET" {
-		log.Printf("DEBUG: getEnvOrDefault for JWT_SECRET returns raw value: %q", value)
-	}
 	if value != "" {
 		return value
 	}
