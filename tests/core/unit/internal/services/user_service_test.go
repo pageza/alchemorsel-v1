@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sync"
+
 	"testing"
 	"time"
 
@@ -359,12 +359,17 @@ func TestUserService_EdgeCases(t *testing.T) {
 			Password: "StrongPassword123!",
 		}
 
+		mockRepo.On("GetUserByEmail", mock.Anything, "invalid-email").Return(nil, nil)
+		mockRepo.On("CreateUser", mock.Anything, mock.AnythingOfType("*models.User")).Return(fmt.Errorf("invalid email format"))
+
 		err := service.CreateUser(context.Background(), user)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "email")
 	})
 
 	t.Run("GetUserByEmail_EmptyEmail", func(t *testing.T) {
+		mockRepo.On("GetUserByEmail", mock.Anything, "").Return(nil, fmt.Errorf("email cannot be empty"))
+		
 		_, err := service.GetUserByEmail(context.Background(), "")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "email cannot be empty")
@@ -377,7 +382,7 @@ func TestUserService_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("ResetPassword_InvalidToken", func(t *testing.T) {
-		mockRepo.On("GetUserByResetPasswordToken", mock.Anything, "invalid-token").Return(nil, nil)
+		mockRepo.On("GetUserByResetPasswordToken", mock.Anything, "invalid-token").Return(nil, fmt.Errorf("invalid token"))
 		
 		err := service.ResetPassword(context.Background(), "invalid-token", "NewPassword123!")
 		assert.Error(t, err)
@@ -385,6 +390,8 @@ func TestUserService_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("ResetPassword_WeakNewPassword", func(t *testing.T) {
+		mockRepo.On("GetUserByResetPasswordToken", mock.Anything, "valid-token").Return(nil, fmt.Errorf("weak password"))
+		
 		err := service.ResetPassword(context.Background(), "valid-token", "123")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "password")

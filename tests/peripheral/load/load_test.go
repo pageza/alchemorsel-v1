@@ -5,7 +5,7 @@ package load
 
 import (
 	"context"
-	"fmt"
+
 	"net/http"
 	"sync"
 	"testing"
@@ -62,7 +62,10 @@ func (s *LoadTestSuite) SimulateUser(ctx context.Context, wg *sync.WaitGroup) {
 		default:
 			start := time.Now()
 			
-			resp, err := http.Get("http://localhost:8080/api/health")
+			client := &http.Client{Timeout: 5 * time.Second}
+			req, _ := http.NewRequest("GET", "http://localhost:8080/v1/health", nil)
+			req.Header.Set("X-Test-Load", "true")
+			resp, err := client.Do(req)
 			responseTime := time.Since(start)
 			
 			success := err == nil && resp != nil && resp.StatusCode == 200
