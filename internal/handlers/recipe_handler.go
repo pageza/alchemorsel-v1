@@ -8,9 +8,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/dtos"
+	"github.com/pageza/alchemorsel-v1/internal/errors"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/services"
 	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -493,9 +495,4 @@ type ResolveRecipeRequest struct {
 type ResolveRecipeResponse struct {
 	Resolved *models.Recipe   `json:"resolved"`
 	Similar  []*models.Recipe `json:"similar"`
-}
-
-// ErrorResponse represents a standard error response
-type ErrorResponse struct {
-	Error string `json:"error"`
 }

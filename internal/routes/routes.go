@@ -60,6 +60,7 @@ func SetupRouter(db *gorm.DB, logger *logging.Logger) *gin.Engine {
 	// Disable trailing slash redirection to prevent 301 redirects on endpoints.
 	router.RedirectTrailingSlash = false
 	router.Use(gin.Recovery())
+	router.Use(middleware.ErrorHandler(logger.Logger))
 	router.Use(gin.Logger())
 	router.Use(logger.RequestIDMiddleware())
 

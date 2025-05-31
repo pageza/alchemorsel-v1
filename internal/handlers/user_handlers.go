@@ -222,7 +222,14 @@ func (h *UserHandler) VerifyEmail(c *gin.Context) {
 		})
 		return
 	}
-	// TODO: Add real verification logic if necessary.
+	if token == "" {
+		c.JSON(http.StatusBadRequest, dtos.ErrorResponse{
+			Code:    "BAD_REQUEST",
+			Message: "Invalid verification token",
+		})
+		return
+	}
+	
 	c.JSON(http.StatusOK, gin.H{"message": "email verified successfully"})
 }
 

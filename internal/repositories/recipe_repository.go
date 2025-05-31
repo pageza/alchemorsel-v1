@@ -2,36 +2,19 @@ package repositories
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pageza/alchemorsel-v1/internal/errors"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
-// RecipeError represents a domain-specific error for recipe operations
-type RecipeError struct {
-	Code    int
-	Message string
-	Err     error
-}
 
-func (e *RecipeError) Error() string {
-	if e.Err != nil {
-		return fmt.Sprintf("recipe error: %s (code: %d): %v", e.Message, e.Code, e.Err)
-	}
-	return fmt.Sprintf("recipe error: %s (code: %d)", e.Message, e.Code)
-}
-
-var (
-	ErrRecipeNotFound = &RecipeError{Code: 404, Message: "recipe not found"}
-	ErrInvalidRecipe  = &RecipeError{Code: 400, Message: "invalid recipe data"}
-	ErrDBOperation    = &RecipeError{Code: 500, Message: "database operation failed"}
-)
 
 var testRecipes = make(map[string]*models.Recipe)
 
@@ -98,7 +81,7 @@ func GetRecipe(id string) (*models.Recipe, error) {
 // SaveRecipe inserts a new recipe into the database.
 func SaveRecipe(recipe *models.Recipe) error {
 	if recipe == nil {
-		return &RecipeError{Code: 400, Message: "recipe cannot be nil"}
+		return errors.NewValidationError("recipe cannot be nil")
 	}
 
 	logger := logrus.WithFields(logrus.Fields{
@@ -111,7 +94,7 @@ func SaveRecipe(recipe *models.Recipe) error {
 	// Validate required fields
 	if recipe.Title == "" {
 		logger.Error("recipe title is required")
-		return &RecipeError{Code: 400, Message: "recipe title is required"}
+		return errors.NewValidationError("recipe title is required")
 	}
 
 	if recipe.ID == "" {
@@ -144,7 +127,7 @@ func SaveRecipe(recipe *models.Recipe) error {
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(recipe).Error; err != nil {
 			logger.WithError(err).Error("failed to save recipe to database")
-			return &RecipeError{Code: 500, Message: "failed to save recipe", Err: err}
+			return errors.NewDatabaseError("failed to save recipe").WithFields(zap.String("recipe_title", recipe.Title))
 		}
 		logger.Info("saved recipe to database")
 		return nil
@@ -155,14 +138,49 @@ func SaveRecipe(recipe *models.Recipe) error {
 
 // UpdateRecipe modifies an existing recipe in the database.
 func UpdateRecipe(id string, recipe *models.Recipe) error {
-	// TODO: Implement database operation to update a recipe.
-	return nil
+	if id == "" {
+		return errors.NewValidationError("recipe ID is required")
+	}
+	if recipe == nil {
+		return errors.NewValidationError("recipe cannot be nil")
+	}
+	
+	if os.Getenv("TEST_MODE") == "true" {
+		if _, exists := testRecipes[id]; !exists {
+			return errors.NewNotFoundError("recipe not found")
+		}
+		testRecipes[id] = recipe
+		return nil
+	}
+	
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(recipe).Error; err != nil {
+			return errors.NewDatabaseError("failed to update recipe").WithFields(zap.String("recipe_id", id))
+		}
+		return nil
+	})
 }
 
 // DeleteRecipe removes a recipe by ID from the database.
 func DeleteRecipe(id string) error {
-	// TODO: Implement database operation to delete a recipe.
-	return nil
+	if id == "" {
+		return errors.NewValidationError("recipe ID is required")
+	}
+	
+	if os.Getenv("TEST_MODE") == "true" {
+		if _, exists := testRecipes[id]; !exists {
+			return errors.NewNotFoundError("recipe not found")
+		}
+		delete(testRecipes, id)
+		return nil
+	}
+	
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&models.Recipe{}, "id = ?", id).Error; err != nil {
+			return errors.NewDatabaseError("failed to delete recipe").WithFields(zap.String("recipe_id", id))
+		}
+		return nil
+	})
 }
 
 type RecipeRepository interface {
@@ -200,7 +218,7 @@ func (r *DefaultRecipeRepository) GetRecipe(ctx context.Context, id string) (*mo
 
 func (r *DefaultRecipeRepository) SaveRecipe(ctx context.Context, recipe *models.Recipe) error {
 	if recipe == nil {
-		return &RecipeError{Code: 400, Message: "recipe cannot be nil"}
+		return errors.NewValidationError("recipe cannot be nil")
 	}
 
 	logger := logrus.WithFields(logrus.Fields{
@@ -213,7 +231,7 @@ func (r *DefaultRecipeRepository) SaveRecipe(ctx context.Context, recipe *models
 	// Validate required fields
 	if recipe.Title == "" {
 		logger.Error("recipe title is required")
-		return &RecipeError{Code: 400, Message: "recipe title is required"}
+		return errors.NewValidationError("recipe title is required")
 	}
 
 	if recipe.ID == "" {
@@ -239,7 +257,7 @@ func (r *DefaultRecipeRepository) SaveRecipe(ctx context.Context, recipe *models
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(recipe).Error; err != nil {
 			logger.WithError(err).Error("failed to save recipe to database")
-			return &RecipeError{Code: 500, Message: "failed to save recipe", Err: err}
+			return errors.NewDatabaseError("failed to save recipe").WithFields(zap.String("recipe_title", recipe.Title))
 		}
 		logger.Info("saved recipe to database")
 		return nil
@@ -279,7 +297,7 @@ func (r *DefaultRecipeRepository) ListRecipes(ctx context.Context, page, limit i
 
 func (r *DefaultRecipeRepository) UpdateRecipe(ctx context.Context, recipe *models.Recipe) error {
 	if recipe == nil {
-		return &RecipeError{Code: 400, Message: "recipe cannot be nil"}
+		return errors.NewValidationError("recipe cannot be nil")
 	}
 
 	logger := logrus.WithFields(logrus.Fields{
@@ -292,7 +310,7 @@ func (r *DefaultRecipeRepository) UpdateRecipe(ctx context.Context, recipe *mode
 	// Validate required fields
 	if recipe.Title == "" {
 		logger.Error("recipe title is required")
-		return &RecipeError{Code: 400, Message: "recipe title is required"}
+		return errors.NewValidationError("recipe title is required")
 	}
 
 	recipe.UpdatedAt = time.Now()
@@ -301,7 +319,7 @@ func (r *DefaultRecipeRepository) UpdateRecipe(ctx context.Context, recipe *mode
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Save(recipe).Error; err != nil {
 			logger.WithError(err).Error("failed to update recipe in database")
-			return &RecipeError{Code: 500, Message: "failed to update recipe", Err: err}
+			return errors.NewDatabaseError("failed to update recipe").WithFields(zap.String("recipe_id", recipe.ID))
 		}
 		logger.Info("updated recipe in database")
 		return nil
@@ -319,14 +337,14 @@ func (r *DefaultRecipeRepository) DeleteRecipe(ctx context.Context, id string) e
 
 	if id == "" {
 		logger.Error("recipe ID is required")
-		return &RecipeError{Code: 400, Message: "recipe ID is required"}
+		return errors.NewValidationError("recipe ID is required")
 	}
 
 	// Use transaction for database operations
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Delete(&models.Recipe{}, "id = ?", id).Error; err != nil {
 			logger.WithError(err).Error("failed to delete recipe from database")
-			return &RecipeError{Code: 500, Message: "failed to delete recipe", Err: err}
+			return errors.NewDatabaseError("failed to delete recipe").WithFields(zap.String("recipe_id", id))
 		}
 		logger.Info("deleted recipe from database")
 		return nil
@@ -374,19 +392,19 @@ func (r *DefaultRecipeRepository) RateRecipe(ctx context.Context, recipeID strin
 
 	if recipeID == "" {
 		logger.Error("recipe ID is required")
-		return &RecipeError{Code: 400, Message: "recipe ID is required"}
+		return errors.NewValidationError("recipe ID is required")
 	}
 
 	// Use transaction for database operations
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var recipe models.Recipe
 		if err := tx.First(&recipe, "id = ?", recipeID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
+			if err == gorm.ErrRecordNotFound {
 				logger.Error("recipe not found")
-				return ErrRecipeNotFound
+				return errors.NewNotFoundError("recipe not found").WithFields(zap.String("recipe_id", recipeID))
 			}
 			logger.WithError(err).Error("failed to retrieve recipe from database")
-			return &RecipeError{Code: 500, Message: "failed to retrieve recipe", Err: err}
+			return errors.NewDatabaseError("failed to retrieve recipe").WithFields(zap.String("recipe_id", recipeID))
 		}
 
 		// Update rating
@@ -395,7 +413,7 @@ func (r *DefaultRecipeRepository) RateRecipe(ctx context.Context, recipeID strin
 
 		if err := tx.Save(&recipe).Error; err != nil {
 			logger.WithError(err).Error("failed to update recipe rating in database")
-			return &RecipeError{Code: 500, Message: "failed to update recipe rating", Err: err}
+			return errors.NewDatabaseError("failed to update recipe rating").WithFields(zap.String("recipe_id", recipeID))
 		}
 
 		logger.Info("updated recipe rating in database")
@@ -414,17 +432,17 @@ func (r *DefaultRecipeRepository) GetRecipeRatings(ctx context.Context, recipeID
 
 	if recipeID == "" {
 		logger.Error("recipe ID is required")
-		return nil, &RecipeError{Code: 400, Message: "recipe ID is required"}
+		return nil, errors.NewValidationError("recipe ID is required")
 	}
 
 	var recipe models.Recipe
 	if err := r.db.WithContext(ctx).First(&recipe, "id = ?", recipeID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if err == gorm.ErrRecordNotFound {
 			logger.Error("recipe not found")
-			return nil, ErrRecipeNotFound
+			return nil, errors.NewNotFoundError("recipe not found").WithFields(zap.String("recipe_id", recipeID))
 		}
 		logger.WithError(err).Error("failed to retrieve recipe from database")
-		return nil, &RecipeError{Code: 500, Message: "failed to retrieve recipe", Err: err}
+		return nil, errors.NewDatabaseError("failed to retrieve recipe").WithFields(zap.String("recipe_id", recipeID))
 	}
 
 	// For now, we'll just return a slice with the average rating repeated RatingCount times
@@ -452,9 +470,9 @@ func (r *DefaultRecipeRepository) ResolveRecipe(ctx context.Context, query strin
 		Preload("Tags")
 
 	if err := db.Where("title = ?", query).First(&exactMatch).Error; err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
+		if err != gorm.ErrRecordNotFound {
 			logger.WithError(err).Error("failed to search for exact match")
-			return nil, nil, &RecipeError{Code: 500, Message: "failed to search for exact match", Err: err}
+			return nil, nil, errors.NewDatabaseError("failed to search for exact match").WithFields(zap.String("query", query))
 		}
 	} else {
 		return &exactMatch, nil, nil
@@ -466,7 +484,7 @@ func (r *DefaultRecipeRepository) ResolveRecipe(ctx context.Context, query strin
 		Or("description LIKE ?", "%"+query+"%").
 		Find(&similarRecipes).Error; err != nil {
 		logger.WithError(err).Error("failed to search for similar recipes")
-		return nil, nil, &RecipeError{Code: 500, Message: "failed to search for similar recipes", Err: err}
+		return nil, nil, errors.NewDatabaseError("failed to search for similar recipes").WithFields(zap.String("query", query))
 	}
 
 	return nil, similarRecipes, nil
