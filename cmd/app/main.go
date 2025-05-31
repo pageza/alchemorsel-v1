@@ -1,8 +1,6 @@
 package main
 
 import (
-	"log"
-	"os"
 	"time"
 
 	"github.com/pageza/alchemorsel-v1/internal/config"

@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"github.com/pageza/alchemorsel-v1/internal/dtos"
 	"github.com/pageza/alchemorsel-v1/internal/errors"

@@ -110,12 +110,12 @@ func (h *RecipeMultistepResolutionHandler) ModifyRecipe(c *gin.Context) {
 		return
 	}
 
-	if req.CandidateRecipe == "" {
+	if req.Candidate == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "candidate recipe is required for modification"})
 		return
 	}
 	
-	modifiedRecipe := req.CandidateRecipe + "\n\n[Modified based on: " + req.ModificationInstructions + "]"
+	modifiedRecipe := req.Candidate + "\n\n[Modified based on: " + req.ModificationInstructions + "]"
 	
 	c.JSON(http.StatusOK, gin.H{
 		"modified_recipe": modifiedRecipe,

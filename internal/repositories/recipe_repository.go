@@ -35,7 +35,7 @@ func ListRecipes() ([]*models.Recipe, error) {
 	var recipes []*models.Recipe
 	if err := DB.Find(&recipes).Error; err != nil {
 		logger.WithError(err).Error("failed to retrieve recipes from database")
-		return nil, &RecipeError{Code: 500, Message: "failed to retrieve recipes", Err: err}
+		return nil, errors.Wrap(err, errors.ErrDatabase, "failed to retrieve recipes")
 	}
 
 	logger.WithField("count", len(recipes)).Info("retrieved recipes from database")
@@ -52,7 +52,7 @@ func GetRecipe(id string) (*models.Recipe, error) {
 
 	if id == "" {
 		logger.Error("empty recipe ID provided")
-		return nil, &RecipeError{Code: 400, Message: "recipe ID is required"}
+		return nil, errors.NewValidationError("recipe ID is required")
 	}
 
 	if os.Getenv("TEST_MODE") != "" || DB == nil {
@@ -61,17 +61,17 @@ func GetRecipe(id string) (*models.Recipe, error) {
 			return recipe, nil
 		}
 		logger.Error("recipe not found in test store")
-		return nil, ErrRecipeNotFound
+		return nil, errors.NewNotFoundError("recipe not found")
 	}
 
 	var recipe models.Recipe
 	if err := DB.First(&recipe, "id = ?", id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if err == gorm.ErrRecordNotFound {
 			logger.Error("recipe not found in database")
-			return nil, ErrRecipeNotFound
+			return nil, errors.NewNotFoundError("recipe not found")
 		}
 		logger.WithError(err).Error("failed to retrieve recipe from database")
-		return nil, &RecipeError{Code: 500, Message: "failed to retrieve recipe", Err: err}
+		return nil, errors.Wrap(err, errors.ErrDatabase, "failed to retrieve recipe")
 	}
 
 	logger.Info("retrieved recipe from database")
