@@ -108,7 +108,7 @@ func (s *ChaosTestSuite) SimulateResourceExhaustion(ctx context.Context, duratio
 // It verifies that the system can handle network delays and maintain
 // acceptable performance levels.
 func TestChaos_NetworkLatency(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 	suite := NewChaosTestSuite(logger)
 
@@ -133,7 +133,7 @@ func TestChaos_NetworkLatency(t *testing.T) {
 // It verifies that the system can handle service failures and maintain
 // acceptable functionality levels.
 func TestChaos_ServiceDisruption(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 	suite := NewChaosTestSuite(logger)
 
@@ -158,7 +158,7 @@ func TestChaos_ServiceDisruption(t *testing.T) {
 // It verifies that the system can handle resource limitations and maintain
 // acceptable performance levels.
 func TestChaos_ResourceExhaustion(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 	suite := NewChaosTestSuite(logger)
 
@@ -183,7 +183,7 @@ func TestChaos_ResourceExhaustion(t *testing.T) {
 // It verifies that the system can recover and return to normal operation
 // after experiencing various failure conditions.
 func TestChaos_Recovery(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 	suite := NewChaosTestSuite(logger)
 

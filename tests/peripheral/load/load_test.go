@@ -5,6 +5,8 @@ package load
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -59,12 +61,18 @@ func (s *LoadTestSuite) SimulateUser(ctx context.Context, wg *sync.WaitGroup) {
 			return
 		default:
 			start := time.Now()
-			// Simulate user actions here
-			// Example: Make API calls, perform database operations
+			
+			resp, err := http.Get("http://localhost:8080/api/health")
 			responseTime := time.Since(start)
-
-			// Record metrics
-			s.recordMetrics(responseTime, true)
+			
+			success := err == nil && resp != nil && resp.StatusCode == 200
+			if resp != nil {
+				resp.Body.Close()
+			}
+			
+			s.recordMetrics(responseTime, success)
+			
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 }
@@ -133,7 +141,7 @@ func (s *LoadTestSuite) validateMetrics(t *testing.T) {
 // It verifies that the system can handle increasing numbers of simultaneous users
 // while maintaining acceptable performance.
 func TestLoad_ConcurrentUsers(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 
 	testCases := []struct {
@@ -158,7 +166,7 @@ func TestLoad_ConcurrentUsers(t *testing.T) {
 // It simulates a high number of concurrent users over an extended period
 // to verify system stability and performance under stress.
 func TestLoad_Stress(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 	suite := NewLoadTestSuite(logger, 200, 60*time.Second)
 	suite.RunLoadTest(t)
@@ -168,7 +176,7 @@ func TestLoad_Stress(t *testing.T) {
 // It first applies high load to stress the system, then verifies that
 // the system can recover and maintain normal performance levels.
 func TestLoad_Recovery(t *testing.T) {
-	t.Skip("Temporarily disabled for MVP")
+
 	logger := zap.NewNop()
 
 	// First apply high load

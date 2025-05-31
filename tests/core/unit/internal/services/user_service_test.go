@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/docker/go-connections/nat"
-	_ "github.com/lib/pq" // cursor-- Added to register the Postgres SQL driver for wait.ForSQL
+	_ "github.com/lib/pq"
 	"github.com/pageza/alchemorsel-v1/internal/db"
 	"github.com/pageza/alchemorsel-v1/internal/models"
 	"github.com/pageza/alchemorsel-v1/internal/repositories"
@@ -335,15 +336,57 @@ func TestResetPassword(t *testing.T) {
 	})
 }
 
-func TestUserService(t *testing.T) {
+func TestUserService_EdgeCases(t *testing.T) {
 	mockRepo := new(MockUserRepository)
-	_ = services.NewUserService(mockRepo)
+	service := services.NewUserService(mockRepo)
 
-	// TODO: Implement actual test cases using the mock repository
-	// For example:
-	// - Test user creation
-	// - Test user retrieval
-	// - Test user update
-	// - Test user deletion
-	// - Test password reset flow
+	t.Run("CreateUser_WeakPassword", func(t *testing.T) {
+		user := &models.User{
+			Name:     "Test User",
+			Email:    "test@example.com",
+			Password: "123",
+		}
+
+		err := service.CreateUser(context.Background(), user)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "password")
+	})
+
+	t.Run("CreateUser_InvalidEmail", func(t *testing.T) {
+		user := &models.User{
+			Name:     "Test User",
+			Email:    "invalid-email",
+			Password: "StrongPassword123!",
+		}
+
+		err := service.CreateUser(context.Background(), user)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "email")
+	})
+
+	t.Run("GetUserByEmail_EmptyEmail", func(t *testing.T) {
+		_, err := service.GetUserByEmail(context.Background(), "")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "email cannot be empty")
+	})
+
+	t.Run("UpdateUser_NilUser", func(t *testing.T) {
+		err := service.UpdateUser(context.Background(), "123", nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "user cannot be nil")
+	})
+
+	t.Run("ResetPassword_InvalidToken", func(t *testing.T) {
+		mockRepo.On("GetUserByResetPasswordToken", mock.Anything, "invalid-token").Return(nil, nil)
+		
+		err := service.ResetPassword(context.Background(), "invalid-token", "NewPassword123!")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid")
+	})
+
+	t.Run("ResetPassword_WeakNewPassword", func(t *testing.T) {
+		err := service.ResetPassword(context.Background(), "valid-token", "123")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "password")
+	})
 }
